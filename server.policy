@@ -1,0 +1,14 @@
+/* AUTOMATICALLY GENERATED ON Fri Mar 05 17:12:37 GMT 2021*/
+/* DO NOT EDIT */
+
+grant codeBase "File:SeiTchizServer.jar" {
+  permission java.io.FilePermission "<<ALL FILES>>", "read, write";
+  permission java.net.SocketPermission "*:1024-", "accept, listen";
+};
+
+grant codeBase "File:bin/" {
+  permission java.io.FilePermission "<<ALL FILES>>", "read, write";
+  permission java.net.SocketPermission "*:1024-", "accept, listen";
+};
+
+

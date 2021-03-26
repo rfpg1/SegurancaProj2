@@ -1,0 +1,46 @@
+/mnt/c/Users/Utilizador/Desktop/unknown.png
+/mnt/c/Users/Utilizador/Desktop/faculdade/blackScreen.jpg
+/mnt/c/Users/Utilizador/Desktop/faculdade/pinkScreen.jpg
+
+C:\Users\Utilizador\Desktop\faculdade\blackScreen.jpg
+C:\Users\Utilizador\Desktop\dawa.png
+
+Classes necessárias:
+Catalogo de Utilizadores
+	HashMap<String, Utilizador>
+Catalogo de Fotografias:
+	HashMap<Utilizador, ArrayList<Fotografia>>
+Catalogo de Grupos:
+	HashMap<Utilizador, Grupo> (grupos que ele é owner)
+
+Grupo:
+	tem owner
+	tem id
+	lista mensagens
+	lista membros
+Utilizador:
+	tem nome
+	tem user
+	tem pw
+	tem varias fotografias
+	
+Fotografia:
+	tem um ID
+	tem nr de likes
+
+
+Fotos.txt
+User:blackscreen.jpg
+User1:Foto2
+
+
+
+
+
+
+
+
+
+
+
+
