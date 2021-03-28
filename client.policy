@@ -1,4 +1,4 @@
-/* AUTOMATICALLY GENERATED ON Fri Mar 05 12:20:22 GMT 2021*/
+/* AUTOMATICALLY GENERATED ON Sun Mar 28 15:32:43 BST 2021*/
 /* DO NOT EDIT */
 
 grant codeBase "File:SeiTchiz.jar" {
@@ -10,3 +10,9 @@ grant codeBase "File:bin/" {
   permission java.io.FilePermission "<<ALL FILES>>", "read, write";
   permission java.net.SocketPermission "127.0.0.1:45678", "connect";
 };
+
+grant codeBase "File:bin/" {
+  permission java.util.PropertyPermission "javax.net.ssl.trustStore", "write";
+  permission java.util.PropertyPermission "javax.net.ssl.trustStorePassword", "write";
+};
+

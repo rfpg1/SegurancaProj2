@@ -9,13 +9,16 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
+
+import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLServerSocketFactory;
 
 public class SeiTchizServer {
 
@@ -46,7 +49,7 @@ public class SeiTchizServer {
 				String passwd = null;
 
 				user = (String) inStream.readObject();
-				passwd = (String)inStream.readObject();
+				//passwd = (String)inStream.readObject();
 				System.out.println("Received user and password");
 
 				if(users.get(user) != null) {
@@ -897,28 +900,33 @@ public class SeiTchizServer {
 		}
 	}
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws NumberFormatException, IOException {
 		System.out.println("servidor: main");
+		System.setProperty("javax.net.ssl.keyStore", "server/" + args[1]);
+		System.setProperty("javax.net.ssl.keyStorePassword", args[2]);
 		SeiTchizServer server = new SeiTchizServer();
 		server.startServer(Integer.parseInt(args[0]));
 	}
 
 	@SuppressWarnings("resource")
-	private void startServer(int port) {
-		ServerSocket sSoc = null;
+	private void startServer(int port) throws IOException {
+		//ServerSocket sSoc = null;
+		ServerSocketFactory ssf = SSLServerSocketFactory.getDefault();	
+		SSLServerSocket ss = (SSLServerSocket) ssf.createServerSocket(port);
 		try {
 			loadUsers();
 			criaPastas();
-			sSoc = new ServerSocket(port);
+			//sSoc = new ServerSocket(port);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 
 		while(true) {
 			try {
-				Socket inSoc = sSoc.accept();
-				ServerThread newServerThread = new ServerThread(inSoc);
-				newServerThread.run();
+				//Socket inSoc = sSoc.accept();
+				//ServerThread newServerThread = new ServerThread(inSoc);
+				//newServerThread.run();
+				new ServerThread(ss.accept()).run();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}

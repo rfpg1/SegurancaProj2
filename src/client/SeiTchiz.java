@@ -8,9 +8,12 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Scanner;
+
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 public class SeiTchiz {
 
@@ -19,25 +22,28 @@ public class SeiTchiz {
 	private static ObjectInputStream inStream;
 
 	public static void main(String[] args) {
-		Socket socket = null;
+		System.setProperty("javax.net.ssl.trustStore", "client/" + args[1]);
+		//Socket socket = null;
 		String[] AdressEporta = args[0].split(":");
 		Scanner sc = new Scanner(System.in);
 		String id = args[1]; // ID of the user
 		System.out.println("User ID: " + id);
+		String adress = AdressEporta[0];
+		int porta = Integer.parseInt(AdressEporta[1]);
+		SocketFactory sf = SSLSocketFactory.getDefault();
 		try {
-			String adress = AdressEporta[0];
-			int porta = Integer.parseInt(AdressEporta[1]);
-			socket = new Socket(adress, porta);
-			String pw = null; // Password of the user
-			if (args.length == 2)  {
-				System.out.println("Insira a sua password: ");
-				pw = sc.nextLine();
-			} else {
-				pw = args[2];
-			}
+			SSLSocket socket = (SSLSocket) sf.createSocket(adress, porta);
+			//socket = new Socket(adress, porta);
+//			String pw = null; // Password of the user
+//			if (args.length == 2)  {
+//				System.out.println("Insira a sua password: ");
+//				pw = sc.nextLine();
+//			} else {
+//				pw = args[2];
+//			}
 			outStream = new ObjectOutputStream(socket.getOutputStream());
 			outStream.writeObject(id);
-			outStream.writeObject(pw);
+			//outStream.writeObject(pw);
 			inStream = new ObjectInputStream(socket.getInputStream());
 			int autenticado = (int) inStream.readObject();
 			switch (autenticado) {
