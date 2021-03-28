@@ -10,23 +10,35 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.ArrayList;
+import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
+import java.security.SecureRandom;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
 
+import javax.crypto.Cipher;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
 
+import facade.exceptions.ApplicationException;
+
 public class SeiTchizServer {
 
+	private static final String SERVER = "server/";
 	private final String FILE = "Users.txt";
 	private final String GRUPOS = "Grupos/";
 	private final String FOTOS = "Fotos/";
 	private final String USERS = "Users/";
-	private HashMap<String, ArrayList<String>> users = new HashMap<>();
+	private final String CLIENT = "client/";
+	private HashMap<String, String> users = new HashMap<>();
 	private final File[] pastas = {new File("Fotos"), new File("Grupos"), new File("Users")};
 
 	class ServerThread implements Runnable{
@@ -46,26 +58,44 @@ public class SeiTchizServer {
 				inStream = new ObjectInputStream(socket.getInputStream());
 
 				String user = null;
-				String passwd = null;
 
 				user = (String) inStream.readObject();
-				//passwd = (String)inStream.readObject();
 				System.out.println("Received user and password");
-
-				if(users.get(user) != null) {
-					String pw = users.get(user).get(1); // Tudo deu certo;
-					if(pw.equals(passwd)) {
-						outStream.writeObject(1);
+				long l = 0;
+				try {
+					l = generateNonce();
+				} catch (ApplicationException e) {
+					System.out.println(e.getMessage());
+				}
+				boolean registered = users.get(user) != null;
+				outStream.writeObject(l);
+				outStream.writeObject(registered);
+				if(registered) {
+					byte[] nonceEncrypted =  (byte[]) inStream.readObject();
+					CertificateFactory fact = CertificateFactory.getInstance("X.509");
+					FileInputStream is = new FileInputStream (CLIENT + users.get(user));
+					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
+					byte[] nonceB = decryptNonce(nonceEncrypted, cert.getPublicKey());
+					ByteBuffer bb = ByteBuffer.wrap(nonceB);
+					long t = bb.getLong();
+					if(l == t) {
+						outStream.writeObject(true);
 					} else {
-						outStream.writeObject(2); // User existe mas a pw não é aquela
-						System.out.println("Wrong password");
-						return;
+						outStream.writeObject(false);
 					}
-				} else { // User ainda não existe
-					outStream.writeObject(3);
-					outStream.writeObject("Insert your name");
-					String nome = (String) inStream.readObject();
-					registaUser(user, passwd, nome);
+				} else {
+					long nonce = (long) inStream.readObject();
+					byte[] nonceEncrypted =  (byte[]) inStream.readObject();
+					Certificate cert = (Certificate) inStream.readObject();
+					byte[] nonceB = decryptNonce(nonceEncrypted, cert.getPublicKey());
+					ByteBuffer bb = ByteBuffer.wrap(nonceB);
+					long t = bb.getLong();
+					if(nonce == t) {
+						registUser(user, "certClient" + user + ".cer");
+						outStream.writeObject(true);
+					} else {
+						outStream.writeObject(false);
+					}
 				}
 				boolean b = true;
 				while(b) {
@@ -146,9 +176,46 @@ public class SeiTchizServer {
 				e.printStackTrace();				
 			} catch (ClassNotFoundException e) {
 				e.printStackTrace();
+			} catch (ApplicationException e) {
+				try {
+					outStream.writeObject(false);
+				} catch (IOException e1) {
+					
+				}
+				System.out.println(e.getMessage());
+			} catch (CertificateException e) {
+				
+			} 
+		}
+
+		private byte[] decryptNonce(byte[] nonce, PublicKey publicKey) throws ApplicationException {
+			try {
+				Cipher cRSA = Cipher.getInstance("RSA");
+				cRSA.init(Cipher.DECRYPT_MODE, publicKey);
+				return cRSA.doFinal(nonce);
+			} catch (Exception e) {
+				throw new ApplicationException("Decription Error");
+			}		
+		}
+
+		private long generateNonce() throws ApplicationException {
+			try {
+				SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
+				byte[] bytes = new byte[1024/8];
+				sr.nextBytes(bytes);
+				// Create two secure number generators with the same seed
+				int seedByteCount = 10;
+				byte[] seed = sr.generateSeed(seedByteCount);
+				sr = SecureRandom.getInstance("SHA1PRNG");
+				sr.setSeed(seed);
+				SecureRandom sr2 = SecureRandom.getInstance("SHA1PRNG");
+				sr2.setSeed(seed);
+				return sr.nextLong();
+			} catch (NoSuchAlgorithmException e) {
+				throw new ApplicationException("Este mm nah existe");
 			}
 		}
-		
+
 		/**
 		 * Returns all messages read by this user
 		 * if group doesn't exist a message is sent
@@ -199,7 +266,7 @@ public class SeiTchizServer {
 			}
 
 		}
-		
+
 		/**
 		 * Gets all the messages from that group that haven't been collected yet
 		 * if group doesn't exist a message is sent
@@ -277,7 +344,7 @@ public class SeiTchizServer {
 			pw.close();
 			sc.close();
 		}
-		
+
 		/**
 		 * Gets the chat of a group
 		 * @param groupID group the get the chat from
@@ -304,7 +371,7 @@ public class SeiTchizServer {
 			sc.close();
 			return msgs;
 		}
-		
+
 		/**
 		 * Sends a message to a group
 		 * if group doesn't exist a message is sent
@@ -332,7 +399,7 @@ public class SeiTchizServer {
 				outStream.writeObject("Group does not exist!\n");
 			}
 		}
-		
+
 		/**
 		 * Add the message to the chat in a group
 		 * @param groupID group the message is added to
@@ -362,14 +429,14 @@ public class SeiTchizServer {
 			pw.print(bob.toString());
 			pw.close();
 		}
-		
+
 		/**
 		 * Gets all the info about the groups of the user logged in
 		 * @param user user logged in
 		 * @throws FileNotFoundException
 		 * @throws IOException
 		 */
-		
+
 		private void ginfo(String user) throws FileNotFoundException, IOException {
 			String grupos = getFromDoc(USERS + user, "Grupos");
 			String owner = getFromDoc(USERS + user, "Owner");
@@ -393,7 +460,7 @@ public class SeiTchizServer {
 			}
 			outStream.writeObject(bob.toString());
 		}
-		
+
 		/**
 		 * Gets all the info about the group given
 		 * if group doesn't exist a message is sent
@@ -425,7 +492,7 @@ public class SeiTchizServer {
 				outStream.writeObject("The group doesn't exist\n");
 			}
 		}
-		
+
 		/**
 		 * Removes a member from a group
 		 * if group doesn't exist a message is sent
@@ -460,7 +527,7 @@ public class SeiTchizServer {
 				outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to remove yourself\\n");
 			}
 		}
-		
+
 		/**
 		 * Adds a member from a group
 		 * if group doesn't exist a message is sent
@@ -488,7 +555,7 @@ public class SeiTchizServer {
 				outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to add yourself\n");
 			}
 		}
-		
+
 		/**
 		 * Creates a new group
 		 * Sends a message if the groupID already exists
@@ -515,7 +582,7 @@ public class SeiTchizServer {
 			}
 
 		}
-		
+
 		/**
 		 * Likes a photo 
 		 * @param user user liking the photo
@@ -547,7 +614,7 @@ public class SeiTchizServer {
 				outStream.writeObject("User does not exist!\n");
 			}	
 		}
-		
+
 		/**
 		 * Verifies if the user exists
 		 * @param user user to be verified
@@ -557,7 +624,7 @@ public class SeiTchizServer {
 		private boolean verifyUser(String user) {
 			return users.get(user) != null;
 		}
-		
+
 		/**
 		 * Sends the last n photos of the users being followed (in total)
 		 * @param user user logged in
@@ -659,7 +726,7 @@ public class SeiTchizServer {
 
 				outStream.writeObject("Photo added\n");
 				outStream.flush();
-				inStream.skip(Long.MAX_VALUE); // TODO: Pensar nisto, já pensei não consigo chegar a outra conclusão
+				inStream.skip(Long.MAX_VALUE);
 			} else {
 				outStream.writeObject("Photo does not exists!\n");
 			}
@@ -870,22 +937,11 @@ public class SeiTchizServer {
 		 * @param name new user name
 		 * @throws FileNotFoundException
 		 */
-		private void registaUser(String user, String passwd, String name) throws FileNotFoundException {
-			ArrayList<String> list = new ArrayList<>();
-			list.add(name);
-			list.add(passwd);
-			users.put(user, list);
+		private void registUser(String user, String certificate) throws FileNotFoundException {
+			users.put(user, certificate);
 			PrintWriter pw = new PrintWriter(FILE);
 			for(String s : users.keySet()) {
-				pw.print(s + ":");
-				ArrayList<String> lista = users.get(s);
-				for (int i = 0; i < lista.size(); i++) {
-					pw.print(lista.get(i));
-					if(i + 1 < lista.size()) {
-						pw.print(":");
-					}
-				}
-				pw.println();
+				pw.println(s + ":" + users.get(s));
 			}
 			pw.close();
 			PrintWriter t = new PrintWriter(USERS + user + ".txt");
@@ -900,32 +956,28 @@ public class SeiTchizServer {
 		}
 	}
 
-	public static void main(String[] args) throws NumberFormatException, IOException {
+	public static void main(String[] args) {
 		System.out.println("servidor: main");
-		System.setProperty("javax.net.ssl.keyStore", "server/" + args[1]);
+		System.setProperty("javax.net.ssl.keyStore", SERVER + args[1]);
 		System.setProperty("javax.net.ssl.keyStorePassword", args[2]);
 		SeiTchizServer server = new SeiTchizServer();
 		server.startServer(Integer.parseInt(args[0]));
 	}
 
 	@SuppressWarnings("resource")
-	private void startServer(int port) throws IOException {
-		//ServerSocket sSoc = null;
+	private void startServer(int port){
 		ServerSocketFactory ssf = SSLServerSocketFactory.getDefault();	
-		SSLServerSocket ss = (SSLServerSocket) ssf.createServerSocket(port);
+		SSLServerSocket ss = null;
 		try {
 			loadUsers();
 			criaPastas();
-			//sSoc = new ServerSocket(port);
+			ss = (SSLServerSocket) ssf.createServerSocket(port);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 
 		while(true) {
 			try {
-				//Socket inSoc = sSoc.accept();
-				//ServerThread newServerThread = new ServerThread(inSoc);
-				//newServerThread.run();
 				new ServerThread(ss.accept()).run();
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -934,7 +986,7 @@ public class SeiTchizServer {
 		//sSoc.close();
 	}
 
-	
+
 	private void criaPastas() {
 		for(File pasta : pastas) {
 			if(!pasta.exists()) {
@@ -948,15 +1000,13 @@ public class SeiTchizServer {
 	 * @throws FileNotFoundException
 	 */
 	private void loadUsers() throws FileNotFoundException {
+		//TODO Desencriptar
 		Scanner sc = new Scanner(new File(FILE));
 		while(sc.hasNextLine()) {
 			String line = sc.nextLine();
-			// user:nome:pw
+			// user:certificate
 			String[] credencias = line.split(":");
-			ArrayList<String> list = new ArrayList<>();
-			list.add(credencias[1]);
-			list.add(credencias[2]);
-			users.put(credencias[0], list);
+			users.put(credencias[0], credencias[1]);
 		}
 
 		sc.close();

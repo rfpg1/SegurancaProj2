@@ -9,8 +9,14 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.cert.Certificate;
 import java.util.Scanner;
 
+import javax.crypto.Cipher;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -20,48 +26,53 @@ public class SeiTchiz {
 	private static final int MEGABYTE = 1024;
 	private static ObjectOutputStream outStream;
 	private static ObjectInputStream inStream;
+	
+	private static final String CLIENT = "client/";
 
-	public static void main(String[] args) {
-		System.setProperty("javax.net.ssl.trustStore", "client/" + args[1]);
-		//Socket socket = null;
+	public static void main(String[] args) throws Exception {
 		String[] AdressEporta = args[0].split(":");
+		String trustStore =  CLIENT + args[1];
+		String keyStore = CLIENT + args[2];
+		String keyStorePassword = args[3];
+		String id = args[4]; // ID of the user
+		System.setProperty("javax.net.ssl.trustStore", trustStore);
+		System.setProperty("javax.net.ssl.keyStore", keyStore);
+		System.setProperty("javax.net.ssl.keyStorePassword", keyStorePassword);
 		Scanner sc = new Scanner(System.in);
-		String id = args[1]; // ID of the user
 		System.out.println("User ID: " + id);
 		String adress = AdressEporta[0];
 		int porta = Integer.parseInt(AdressEporta[1]);
 		SocketFactory sf = SSLSocketFactory.getDefault();
 		try {
 			SSLSocket socket = (SSLSocket) sf.createSocket(adress, porta);
-			//socket = new Socket(adress, porta);
-//			String pw = null; // Password of the user
-//			if (args.length == 2)  {
-//				System.out.println("Insira a sua password: ");
-//				pw = sc.nextLine();
-//			} else {
-//				pw = args[2];
-//			}
 			outStream = new ObjectOutputStream(socket.getOutputStream());
 			outStream.writeObject(id);
-			//outStream.writeObject(pw);
+			
 			inStream = new ObjectInputStream(socket.getInputStream());
-			int autenticado = (int) inStream.readObject();
-			switch (autenticado) {
-			case 1: //User atenticado e deu certo
-				System.out.println("Correct Password!");
-				break;
-			case 2: //User existe mas a pw não é essa
-				System.out.println("Wrong Password!");
-				sc.close();
-				socket.close();
-				return;
-				//break;
-			case 3: //User não existe
-				System.out.println((String)inStream.readObject());
-				String nome = sc.nextLine();
-				outStream.writeObject(nome);
-				System.out.println("User registered\n");
-				break;
+			long nonce = (long) inStream.readObject();
+			boolean registered = (boolean) inStream.readObject();
+			byte[] nonceEncrypted = encryptNonce(nonce, keyStore, keyStorePassword);
+			if(registered) {
+				outStream.writeObject(nonceEncrypted);
+				boolean b = (boolean) inStream.readObject();
+				if(b) {
+					System.out.println("Authentication was successful");
+				} else {
+					System.out.println("Authentication  was not successful");
+					return;
+				}
+			} else {
+				outStream.writeObject(nonce);
+				outStream.writeObject(nonceEncrypted);
+				Certificate cert = getCertificate(keyStore, keyStorePassword);
+				outStream.writeObject(cert);
+				boolean b = (boolean) inStream.readObject();
+				if(b) {
+					System.out.println("Regist was successful");
+				} else {
+					System.out.println("Regist was not successful");
+					return;
+				}
 			}
 			String line = null;
 			do {
@@ -74,7 +85,7 @@ public class SeiTchiz {
 			sc.close();
 
 		} catch(FileNotFoundException e) {
-			System.out.println("Ficheiro não existe");
+			System.out.println("Ficheiro nao existe");
 		} catch (UnknownHostException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -84,6 +95,45 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static byte[] encryptNonce(long nonce, String key, String pw) throws Exception {
+		PrivateKey pKey = getPrivateKey(key, pw);
+		Cipher cRSA = Cipher.getInstance("RSA"); //TODO TALVEZ METER EM FINAL
+		cRSA.init(Cipher.ENCRYPT_MODE, pKey);
+		ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+		buffer.putLong(nonce);
+		byte[] nonceBytes = buffer.array();
+		return cRSA.doFinal(nonceBytes);
+	}
+	
+	private static PrivateKey getPrivateKey(String key, String pw) throws Exception {
+		FileInputStream ins = new FileInputStream(key);
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS"); //TODO TALVEZ METER EM FINAL
+		keyStore.load(ins, pw.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		
+		return (PrivateKey) keyStore.getKey(alias, pw.toCharArray());
+	}
+	
+	private static Certificate getCertificate(String key, String pw) throws Exception {
+		FileInputStream ins = new FileInputStream(key);
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, pw.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		Certificate cert = keyStore.getCertificate(alias);
+		return cert;
+	}
+	
+	private static PublicKey getPublicKey(String key) throws Exception {
+		FileInputStream ins = new FileInputStream("myKeys");
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, "testes".toCharArray());   //Keystore password
+		Certificate cert = keyStore.getCertificate("keyRSA");
+		return cert.getPublicKey();
+	}
+
 	/**
 	 * Processes the request of the user
 	 * @param line String with the method in the first position after a split by spaces
