@@ -12,7 +12,6 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.security.KeyStore;
 import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.security.cert.Certificate;
 import java.util.Scanner;
 
@@ -123,15 +122,6 @@ public class SeiTchiz {
 		String alias = keyStore.aliases().asIterator().next();
 		Certificate cert = keyStore.getCertificate(alias);
 		return cert;
-	}
-	
-	private static PublicKey getPublicKey(String key) throws Exception {
-		FileInputStream ins = new FileInputStream("myKeys");
-
-		KeyStore keyStore = KeyStore.getInstance("JCEKS");
-		keyStore.load(ins, "testes".toCharArray());   //Keystore password
-		Certificate cert = keyStore.getCertificate("keyRSA");
-		return cert.getPublicKey();
 	}
 
 	/**

@@ -1,5 +1,5 @@
 package server;
-
+//TODO New-group depois de explicação de alguém!
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
