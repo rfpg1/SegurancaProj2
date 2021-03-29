@@ -32,8 +32,6 @@ import javax.net.ssl.SSLServerSocketFactory;
 
 import facade.exceptions.ApplicationException;
 
-//TODO encriptar users.txt
-
 public class SeiTchizServer {
 
 	private static final String SERVER = "server/";
@@ -192,8 +190,6 @@ public class SeiTchizServer {
 			} catch (CertificateException e) {
 				
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			} 
 		}
 
@@ -836,16 +832,24 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 		private void follow(String user, String userASeguir) throws IOException {
-			if(users.get(userASeguir) != null) { //Caso o userASeguir exista
-				if(!seguir(user, userASeguir)) {
-					addToDoc(USERS + userASeguir, "Seguidores", user);
-					addToDoc(USERS + user, "Seguindo", userASeguir);
-					outStream.writeObject("User followed\n");
+			try {
+				decrypt(USERS + userASeguir + ".txt");
+				decrypt(USERS + user + ".txt");
+				if(users.get(userASeguir) != null) { //Caso o userASeguir exista
+					if(!seguir(user, userASeguir)) {
+						addToDoc(USERS + userASeguir, "Seguidores", user);
+						addToDoc(USERS + user, "Seguindo", userASeguir);
+						outStream.writeObject("User followed\n");
+					} else {
+						outStream.writeObject("User is already being followed\n");
+					}
 				} else {
-					outStream.writeObject("User is already being followed\n");
+					outStream.writeObject("User does not exist\n");
 				}
-			} else {
-				outStream.writeObject("User does not exist\n");
+				encrypt(USERS + userASeguir + ".txt");
+				encrypt(USERS + user + ".txt");
+			} catch (Exception e) {
+				System.out.println("Error encryption or decryption method -> follow");
 			}
 		}
 
@@ -947,7 +951,6 @@ public class SeiTchizServer {
 		 * @throws FileNotFoundException
 		 */
 		private void registUser(String user, String certificate) throws Exception {
-			//TODO desencriptar e apos adicionar um novo gah encriptar
 			decrypt(FILE);
 			users.put(user, certificate);
 			PrintWriter pw = new PrintWriter(FILE);
@@ -964,6 +967,7 @@ public class SeiTchizServer {
 			t.println("Grupos:");
 			t.print("Owner:");
 			t.close();
+			encrypt(USERS + user + ".txt");
 			encrypt(FILE);
 		}
 	}
@@ -1003,7 +1007,7 @@ public class SeiTchizServer {
 			rawDataFromKey.read(keyText);
 			rawDataFromKey.close();
 			byte[] dataDecrypted = cRSA.doFinal(keyText);
-			FileOutputStream fos = new FileOutputStream(FILE);
+			FileOutputStream fos = new FileOutputStream(file);
 			fos.write(dataDecrypted);
 			fos.close();
 		}
@@ -1066,7 +1070,6 @@ public class SeiTchizServer {
 	 * @throws FileNotFoundException
 	 */
 	private void loadUsers() throws Exception {
-		//TODO Desencriptar
 		decrypt(FILE);
 		Scanner sc = new Scanner(new File(FILE));
 		while(sc.hasNextLine()) {
