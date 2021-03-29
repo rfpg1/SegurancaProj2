@@ -337,7 +337,7 @@ public class SeiTchiz {
 		while(bb){
 			bb = (boolean) inStream.readObject();
 			if(bb){
-				bob.append("Fotos: \n");
+				bob.append("Foto: ");
 				String name = (String) inStream.readObject();
 				int filesize = (int) inStream.readObject();
 				OutputStream os = new FileOutputStream("Fotos/" + name);

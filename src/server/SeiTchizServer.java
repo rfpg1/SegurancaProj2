@@ -597,26 +597,32 @@ public class SeiTchizServer {
 		 */
 
 		private void like(String user, String photoID) throws IOException { //photoID é user:id
-			String[] profilePhoto = photoID.split(":");
-			if(verifyUser(profilePhoto[0])) {
-				boolean b = false;
-				String[] photos = getFromDoc(USERS + profilePhoto[0], "Fotos").split(",");
-				for(String photo : photos) {
-					if(photo.split("/")[0].equals(profilePhoto[1])) {
-						removeFromDoc(USERS + profilePhoto[0], "Fotos", photo);
-						int likes = Integer.parseInt(photo.split("/")[1]) + 1;
-						String newInfo = photo.split("/")[0] + "/" + likes;
-						addToDoc(USERS + profilePhoto[0], "Fotos", newInfo);
-						b = true;
+			try {
+				String[] profilePhoto = photoID.split(":");
+				decrypt(USERS + profilePhoto[0] + ".txt");
+				if(verifyUser(profilePhoto[0])) {
+					boolean b = false;
+					String[] photos = getFromDoc(USERS + profilePhoto[0], "Fotos").split(",");
+					for(String photo : photos) {
+						if(photo.split("/")[0].equals(profilePhoto[1])) {
+							removeFromDoc(USERS + profilePhoto[0], "Fotos", photo);
+							int likes = Integer.parseInt(photo.split("/")[1]) + 1;
+							String newInfo = photo.split("/")[0] + "/" + likes;
+							addToDoc(USERS + profilePhoto[0], "Fotos", newInfo);
+							b = true;
+						}
 					}
-				}
-				if(b) {
-					outStream.writeObject("Liked photo\n");
+					if(b) {
+						outStream.writeObject("Liked photo\n");
+					} else {
+						outStream.writeObject("Photo does not exist!\n");
+					}
 				} else {
-					outStream.writeObject("Photo does not exist!\n");
+					outStream.writeObject("User does not exist!\n");
 				}
-			} else {
-				outStream.writeObject("User does not exist!\n");
+				encrypt(USERS + profilePhoto[0] + ".txt");
+			} catch(Exception e) {
+				System.out.println("Error encryption or decryption method -> like");
 			}	
 		}
 
@@ -637,20 +643,30 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 
-		private void wall(String user, int nfotos) throws IOException {
-			List<String> seguindo = Arrays.asList(getFromDoc(USERS + user, "Seguindo").split(","));
-			Scanner fotos = new Scanner(new File("Fotos.txt"));
-			while(fotos.hasNextLine()) {
-				String[] t = fotos.nextLine().split(":");
-				if(seguindo.contains(t[0]) && nfotos > 0) {
-					outStream.writeObject(nfotos > 0);
-					nfotos--;
-					sendPhoto(t[0], t[1]);
-					sendIDAndLikes(t[0], t[1]);
+		private void wall(String user, int nfotos) {
+			try {
+				decrypt(USERS + user + ".txt");
+				decrypt("Fotos.txt");
+				List<String> seguindo = Arrays.asList(getFromDoc(USERS + user, "Seguindo").split(","));
+				Scanner fotos = new Scanner(new File("Fotos.txt"));
+				while(fotos.hasNextLine()) {
+					String[] t = fotos.nextLine().split(":");
+					if(seguindo.contains(t[0]) && nfotos > 0) {
+						outStream.writeObject(nfotos > 0);
+						nfotos--;
+						sendPhoto(t[0], t[1]);
+						decrypt(USERS + t[0] + ".txt");
+						sendIDAndLikes(t[0], t[1]);
+						encrypt(USERS + t[0] + ".txt");
+					}
 				}
+				outStream.writeObject(false);
+				fotos.close();
+				encrypt(USERS + user + ".txt");
+				encrypt("Fotos.txt");
+			} catch (Exception e) {
+				System.out.println("Error encryption or decryption method -> wall");
 			}
-			outStream.writeObject(false);
-			fotos.close();
 		}
 
 		/**
@@ -719,21 +735,29 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 
-		private void post(String user) throws ClassNotFoundException, IOException {
-			int id = Integer.parseInt(getFromDoc(USERS + user, "ID"));
-			id++;
-			boolean b = (boolean) inStream.readObject();
-			if(b) {
-				saveImage(user, id);
-				addToDoc(USERS + user, "Fotos", String.valueOf(id) + "/0");
-				addToDoc("Fotos", null, user + ":" + id);
-				changeID(USERS + user, id);
+		private void post(String user) {
+			try {
+				decrypt(USERS + user + ".txt");
+				decrypt("Fotos.txt");
+				int id = Integer.parseInt(getFromDoc(USERS + user, "ID"));
+				id++;
+				boolean b = (boolean) inStream.readObject();
+				if(b) {
+					saveImage(user, id);
+					addToDoc(USERS + user, "Fotos", String.valueOf(id) + "/0");
+					addToDoc("Fotos", null, user + ":" + id);
+					changeID(USERS + user, id);
 
-				outStream.writeObject("Photo added\n");
-				outStream.flush();
-				inStream.skip(Long.MAX_VALUE);
-			} else {
-				outStream.writeObject("Photo does not exists!\n");
+					outStream.writeObject("Photo added\n");
+					outStream.flush();
+					inStream.skip(Long.MAX_VALUE);
+				} else {
+					outStream.writeObject("Photo does not exists!\n");
+				}
+				encrypt(USERS + user + ".txt");
+				encrypt("Fotos.txt");
+			} catch(Exception e) {
+				System.out.println("Error encryption or decryption method -> post");
 			}
 
 		}
