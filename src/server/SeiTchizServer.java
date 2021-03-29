@@ -11,7 +11,9 @@ import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
@@ -30,6 +32,8 @@ import javax.net.ssl.SSLServerSocketFactory;
 
 import facade.exceptions.ApplicationException;
 
+//TODO encriptar users.txt
+
 public class SeiTchizServer {
 
 	private static final String SERVER = "server/";
@@ -40,8 +44,10 @@ public class SeiTchizServer {
 	private final String CLIENT = "client/";
 	private HashMap<String, String> users = new HashMap<>();
 	private final File[] pastas = {new File("Fotos"), new File("Grupos"), new File("Users")};
+	private String keyStore;
+	private String keyStorePassword;
 
-	class ServerThread implements Runnable{
+	class ServerThread implements Runnable {
 
 		private final int MEGABYTE = 1024;
 		private Socket socket = null;
@@ -185,6 +191,9 @@ public class SeiTchizServer {
 				System.out.println(e.getMessage());
 			} catch (CertificateException e) {
 				
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			} 
 		}
 
@@ -937,7 +946,9 @@ public class SeiTchizServer {
 		 * @param name new user name
 		 * @throws FileNotFoundException
 		 */
-		private void registUser(String user, String certificate) throws FileNotFoundException {
+		private void registUser(String user, String certificate) throws Exception {
+			//TODO desencriptar e apos adicionar um novo gah encriptar
+			decrypt(FILE);
 			users.put(user, certificate);
 			PrintWriter pw = new PrintWriter(FILE);
 			for(String s : users.keySet()) {
@@ -953,6 +964,7 @@ public class SeiTchizServer {
 			t.println("Grupos:");
 			t.print("Owner:");
 			t.close();
+			encrypt(FILE);
 		}
 	}
 
@@ -961,18 +973,72 @@ public class SeiTchizServer {
 		System.setProperty("javax.net.ssl.keyStore", SERVER + args[1]);
 		System.setProperty("javax.net.ssl.keyStorePassword", args[2]);
 		SeiTchizServer server = new SeiTchizServer();
-		server.startServer(Integer.parseInt(args[0]));
+		server.startServer(Integer.parseInt(args[0]), args[1], args[2]);
+	}
+
+	private void encrypt(String file) throws Exception {
+		PrivateKey privateKey = getPrivateKey("server/" + this.keyStore, this.keyStorePassword);
+		Cipher cRSA = Cipher.getInstance("RSA");
+		cRSA.init(Cipher.ENCRYPT_MODE, privateKey);
+		
+		File f = new File(file);
+		FileInputStream rawDataFromFile = new FileInputStream(f);
+		byte[] plainText = new byte[(int)f.length()];
+		rawDataFromFile.read(plainText);
+		rawDataFromFile.close();
+		byte[] encodedKey = cRSA.doFinal(plainText);
+		FileOutputStream fos = new FileOutputStream(f);
+		fos.write(encodedKey);
+		fos.close();
+	}
+
+	private void decrypt(String file) throws Exception {
+		PublicKey publicKey = getPublicKey("server/" + this.keyStore, this.keyStorePassword);
+		File f = new File(file);
+		if(f.length() > 0) {
+			Cipher cRSA = Cipher.getInstance("RSA");
+			cRSA.init(Cipher.DECRYPT_MODE, publicKey);
+			FileInputStream rawDataFromKey = new FileInputStream(f);
+			byte[] keyText = new byte[(int)f.length()];
+			rawDataFromKey.read(keyText);
+			rawDataFromKey.close();
+			byte[] dataDecrypted = cRSA.doFinal(keyText);
+			FileOutputStream fos = new FileOutputStream(FILE);
+			fos.write(dataDecrypted);
+			fos.close();
+		}
+	}
+	
+	private static PrivateKey getPrivateKey(String keyStoreFile, String keyStorePassword) throws Exception {
+		FileInputStream ins = new FileInputStream(keyStoreFile);
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		return (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+	}
+
+	private PublicKey getPublicKey(String keyStoreFile, String keyStorePassword) throws Exception {
+		FileInputStream ins = new FileInputStream(keyStoreFile);
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		Certificate cert = keyStore.getCertificate(alias);
+		return cert.getPublicKey();
 	}
 
 	@SuppressWarnings("resource")
-	private void startServer(int port){
+	private void startServer(int port, String keyStore, String keyStorePassword){
 		ServerSocketFactory ssf = SSLServerSocketFactory.getDefault();	
 		SSLServerSocket ss = null;
+		this.keyStore = keyStore;
+		this.keyStorePassword = keyStorePassword;
 		try {
 			loadUsers();
 			criaPastas();
 			ss = (SSLServerSocket) ssf.createServerSocket(port);
-		} catch (IOException e) {
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 
@@ -999,8 +1065,9 @@ public class SeiTchizServer {
 	 * Load the users from our file
 	 * @throws FileNotFoundException
 	 */
-	private void loadUsers() throws FileNotFoundException {
+	private void loadUsers() throws Exception {
 		//TODO Desencriptar
+		decrypt(FILE);
 		Scanner sc = new Scanner(new File(FILE));
 		while(sc.hasNextLine()) {
 			String line = sc.nextLine();
@@ -1008,7 +1075,7 @@ public class SeiTchizServer {
 			String[] credencias = line.split(":");
 			users.put(credencias[0], credencias[1]);
 		}
-
 		sc.close();
+		encrypt(FILE);
 	}
 }
