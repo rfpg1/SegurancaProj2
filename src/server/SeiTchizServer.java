@@ -184,11 +184,11 @@ public class SeiTchizServer {
 				try {
 					outStream.writeObject(false);
 				} catch (IOException e1) {
-					
+
 				}
 				System.out.println(e.getMessage());
 			} catch (CertificateException e) {
-				
+
 			} catch (Exception e) {
 			} 
 		}
@@ -789,20 +789,26 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 		private void viewFollowers(String user) throws IOException{
-			Scanner sc = new Scanner(new File(USERS + user+ ".txt"));
-			while(sc.hasNextLine()) {
-				String line = sc.nextLine();
-				String[] sp = line.split(":");
-				if(sp[0].equals("Seguidores")) {
-					if(sp.length > 1) {
-						outStream.writeObject(sp[1].substring(0, sp[1].length() - 1) + "\n");
-					} else {
-						outStream.writeObject("You don't have any followers\n");
+			try {
+				decrypt(USERS + user+ ".txt");
+				Scanner sc = new Scanner(new File(USERS + user+ ".txt"));
+				while(sc.hasNextLine()) {
+					String line = sc.nextLine();
+					String[] sp = line.split(":");
+					if(sp[0].equals("Seguidores")) {
+						if(sp.length > 1) {
+							outStream.writeObject(sp[1].substring(0, sp[1].length() - 1) + "\n");
+						} else {
+							outStream.writeObject("You don't have any followers\n");
+						}
+						break;
 					}
-					break;
 				}
+				sc.close();
+				encrypt(USERS + user+ ".txt");
+			} catch (Exception e) {
+				System.out.println("Error encryption or decryption method -> viewFollowers");
 			}
-			sc.close();
 		}
 
 		/**
@@ -812,16 +818,24 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 		private void unfollow(String user, String userASeguir) throws IOException {
-			if(users.get(userASeguir) != null) { //Caso o userASeguir exista
-				if(seguir(user, userASeguir)) {
-					removeFromDoc(USERS + userASeguir, "Seguidores", user);
-					removeFromDoc(USERS + user, "Seguindo", userASeguir);
-					outStream.writeObject("User unfollowed\n");
+			try {
+				decrypt(USERS + userASeguir + ".txt");
+				decrypt(USERS + user + ".txt");
+				if(users.get(userASeguir) != null) { //Caso o userASeguir exista
+					if(seguir(user, userASeguir)) {
+						removeFromDoc(USERS + userASeguir, "Seguidores", user);
+						removeFromDoc(USERS + user, "Seguindo", userASeguir);
+						outStream.writeObject("User unfollowed\n");
+					} else {
+						outStream.writeObject("User isn't being followed\n");
+					}
 				} else {
-					outStream.writeObject("User isn't being followed\n");
+					outStream.writeObject("User does not exist\n");
 				}
-			} else {
-				outStream.writeObject("User does not exist\n");
+				encrypt(USERS + userASeguir + ".txt");
+				encrypt(USERS + user + ".txt");
+			} catch (Exception e) {
+				System.out.println("Error encryption or decryption method -> unfollow");
 			}
 		}
 
@@ -984,7 +998,7 @@ public class SeiTchizServer {
 		PrivateKey privateKey = getPrivateKey("server/" + this.keyStore, this.keyStorePassword);
 		Cipher cRSA = Cipher.getInstance("RSA");
 		cRSA.init(Cipher.ENCRYPT_MODE, privateKey);
-		
+
 		File f = new File(file);
 		FileInputStream rawDataFromFile = new FileInputStream(f);
 		byte[] plainText = new byte[(int)f.length()];
@@ -1012,7 +1026,7 @@ public class SeiTchizServer {
 			fos.close();
 		}
 	}
-	
+
 	private static PrivateKey getPrivateKey(String keyStoreFile, String keyStorePassword) throws Exception {
 		FileInputStream ins = new FileInputStream(keyStoreFile);
 
