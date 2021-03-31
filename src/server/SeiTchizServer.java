@@ -1,5 +1,6 @@
 package server;
 //TODO New-group depois de explicação de alguém!
+//TODO ID do grupo passar a chamar LastMessage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -26,6 +27,8 @@ import java.util.List;
 import java.util.Scanner;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -541,23 +544,63 @@ public class SeiTchizServer {
 		 * @param owner owner of the group
 		 * @param userID user to be added to the group
 		 * @param groupID group to be added to
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void addNewMember(String owner, String userID, String groupID) throws IOException {
-			List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
-			if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
-				List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-				if(!members.contains(userID)) {
-					int gID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
-					addToDoc(GRUPOS + groupID, "Members", userID);
-					addToDoc(USERS + userID, "Grupos", groupID + "/" +  gID + "/" + gID);
-					outStream.writeObject("Member added\n");
+		private void addNewMember(String owner, String userID, String groupID) throws Exception {
+			try {
+				decrypt("Grupos.txt");
+				decrypt(GRUPOS + groupID + ".txt");
+				decrypt(USERS + userID + "/" + userID + ".txt");
+				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
+				if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
+					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
+					if(!members.contains(userID)) {
+						int gID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+						addToDoc(GRUPOS + groupID, "Members", userID);
+						addToDoc(USERS + userID + "/" + userID, "Grupos", groupID + "/" +  gID + "/" + gID);
+						//Criar a chave
+						KeyGenerator kg = KeyGenerator.getInstance("AES");
+						kg.init(128);
+						SecretKey key = kg.generateKey();
+						
+						String i = getFromDoc(GRUPOS + groupID, "Identificador");
+						int id = Integer.parseInt(i.substring(0, i.length() - 1));
+						removeFromDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						id++;
+						addToDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
+						for(String member : members) {
+							Cipher cRSA = Cipher.getInstance("RSA");
+							PublicKey publicKey = getCertificate(member).getPublicKey();
+							cRSA.init(Cipher.WRAP_MODE, publicKey);
+							byte[] encodedKey = cRSA.wrap(key);
+							FileOutputStream fos = new FileOutputStream(USERS + member + "/" + groupID + id + ".key");
+							fos.write(encodedKey);
+							fos.close();
+						}
+						Cipher cRSA = Cipher.getInstance("RSA");
+						PublicKey publicKey = getCertificate(owner).getPublicKey();
+						cRSA.init(Cipher.WRAP_MODE, publicKey);
+						byte[] encodedKey = cRSA.wrap(key);
+						FileOutputStream fos = new FileOutputStream(USERS + owner + "/" + groupID + id + ".key");
+						fos.write(encodedKey);
+						fos.close();
+						outStream.writeObject("Member added\n");
+					} else {
+						outStream.writeObject("Member is already in group\n");
+					}
 				} else {
-					outStream.writeObject("Member is already in group\n");
+					outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to add yourself\n");
 				}
-			} else {
-				outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to add yourself\n");
+				encrypt(USERS + userID + "/" + userID + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				encrypt("Grupos.txt");
+			} catch (Exception e) {
+				encrypt("Grupos.txt");
+				encrypt(USERS + userID + "/" + userID + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				System.out.println("Error encryption or decryption method -> addNewMember");
 			}
 		}
 
@@ -566,27 +609,67 @@ public class SeiTchizServer {
 		 * Sends a message if the groupID already exists
 		 * @param user user logged in and the owner of the group
 		 * @param groupID ID of the new group
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void newGroup(String user, String groupID) throws IOException {
-			List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
-			if(!grupos.contains(groupID)) {
-				addToDoc("Grupos", "Grupos", groupID);
-				addToDoc(USERS + user, "Grupos", groupID + "/0/0");
-				addToDoc(USERS + user, "Owner", groupID);
-				PrintWriter pw = new PrintWriter(GRUPOS + groupID + ".txt");
-				pw.println("Owner:" + user);
-				pw.println("Members:");
-				pw.println("ID:0");
-				pw.print("Chat:\n");
-				pw.close();
-				outStream.writeObject("Group created\n");
-			} else {
-				outStream.writeObject("Group with that name already exists\n");
+		private void newGroup(String user, String groupID) throws Exception {
+			try {
+				decrypt("Grupos.txt");
+				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
+				if(!grupos.contains(groupID)) {
+					decrypt(USERS + user + "/" + user+ ".txt");
+					addToDoc("Grupos", "Grupos", groupID);
+					addToDoc(USERS + user + "/" + user, "Grupos", groupID + "/0/0");
+					addToDoc(USERS + user + "/" + user, "Owner", groupID);
+					PrintWriter pw = new PrintWriter(GRUPOS + groupID + ".txt");
+					pw.println("Owner:" + user);
+					pw.println("Members:");
+					pw.println("ID:0");
+					pw.println("Identificador:0,");
+					pw.print("Chat:\n");
+					pw.close();
+					outStream.writeObject("Group created\n");
+					//Criar a chave
+					KeyGenerator kg = KeyGenerator.getInstance("AES");
+					kg.init(128);
+					SecretKey key = kg.generateKey();
+					//Criar o cipher
+					Cipher cRSA = Cipher.getInstance("RSA");
+					PublicKey publicKey = getCertificate(user).getPublicKey();
+					cRSA.init(Cipher.WRAP_MODE, publicKey);
+					byte[] encodedKey = cRSA.wrap(key);
+					FileOutputStream fos = new FileOutputStream(USERS + user + "/" + groupID + "0.key");
+					fos.write(encodedKey);
+					fos.close();
+					encrypt(USERS + user + "/" + user+ ".txt");
+					encrypt(GRUPOS + groupID + ".txt");
+				} else {
+					outStream.writeObject("Group with that name already exists\n");
+				}
+				encrypt("Grupos.txt");
+			} catch (Exception e ) {
+				encrypt("Grupos.txt");
+				encrypt(USERS + user + ".txt");
+				System.out.println("Error encryption or decryption method -> newGroup");
 			}
-
 		}
+
+		private Certificate getCertificate(String user) throws Exception {
+			try {
+				decrypt(FILE);
+				String certFile = getFromDoc("Users", user);
+				CertificateFactory fact = CertificateFactory.getInstance("X.509");
+				FileInputStream is = new FileInputStream (CLIENT + certFile);
+				X509Certificate cer = (X509Certificate) fact.generateCertificate(is);
+				encrypt(FILE);
+				return cer;
+			} catch (Exception e) {
+				encrypt(FILE);
+				System.out.println("Error encryption or decryption method -> getCertificate");
+			}
+			return null;
+		}
+
 
 		/**
 		 * Likes a photo 
@@ -595,7 +678,7 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 * @requires photoID has to be like User:PhotoID
 		 */
-
+//TODO mudar as pastas
 		private void like(String user, String photoID) throws IOException { //photoID Ã© user:id
 			try {
 				String[] profilePhoto = photoID.split(":");
@@ -640,14 +723,15 @@ public class SeiTchizServer {
 		 * Sends the last n photos of the users being followed (in total)
 		 * @param user user logged in
 		 * @param nfotos number of photos
+		 * @throws Exception 
 		 * @throws IOException
 		 */
 
-		private void wall(String user, int nfotos) {
+		private void wall(String user, int nfotos) throws Exception {
 			try {
-				decrypt(USERS + user + ".txt");
+				decrypt(USERS + user + "/" + user + ".txt");
 				decrypt("Fotos.txt");
-				List<String> seguindo = Arrays.asList(getFromDoc(USERS + user, "Seguindo").split(","));
+				List<String> seguindo = Arrays.asList(getFromDoc(USERS + user + "/" + user, "Seguindo").split(","));
 				Scanner fotos = new Scanner(new File("Fotos.txt"));
 				while(fotos.hasNextLine()) {
 					String[] t = fotos.nextLine().split(":");
@@ -655,16 +739,18 @@ public class SeiTchizServer {
 						outStream.writeObject(nfotos > 0);
 						nfotos--;
 						sendPhoto(t[0], t[1]);
-						decrypt(USERS + t[0] + ".txt");
+						decrypt(USERS + t[0] + "/" + t[0] + ".txt");
 						sendIDAndLikes(t[0], t[1]);
-						encrypt(USERS + t[0] + ".txt");
+						encrypt(USERS + t[0] + "/" + t[0] + ".txt");
 					}
 				}
 				outStream.writeObject(false);
 				fotos.close();
-				encrypt(USERS + user + ".txt");
+				encrypt(USERS + user + "/" + user + ".txt");
 				encrypt("Fotos.txt");
 			} catch (Exception e) {
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt("Fotos.txt");
 				System.out.println("Error encryption or decryption method -> wall");
 			}
 		}
@@ -676,7 +762,7 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 		private void sendIDAndLikes(String user, String id) throws IOException {
-			String[] photos = getFromDoc(USERS + user, "Fotos").split(",");
+			String[] photos = getFromDoc(USERS + user + "/" + user, "Fotos").split(",");
 			for(String photo : photos) {
 				if(photo.split("/")[0].equals(id)) {
 					outStream.writeObject(user + ": (id/likes) " + photo);
@@ -731,22 +817,23 @@ public class SeiTchizServer {
 		/**
 		 * Posts the photo the current user requested to post
 		 * @param user current user 
+		 * @throws Exception 
 		 * @throws ClassNotFoundException
 		 * @throws IOException
 		 */
 
-		private void post(String user) {
+		private void post(String user) throws Exception {
 			try {
-				decrypt(USERS + user + ".txt");
+				decrypt(USERS + user + "/" + user + ".txt");
 				decrypt("Fotos.txt");
-				int id = Integer.parseInt(getFromDoc(USERS + user, "ID"));
+				int id = Integer.parseInt(getFromDoc(USERS + user + "/" + user, "ID"));
 				id++;
 				boolean b = (boolean) inStream.readObject();
 				if(b) {
 					saveImage(user, id);
-					addToDoc(USERS + user, "Fotos", String.valueOf(id) + "/0");
+					addToDoc(USERS + user + "/" + user, "Fotos", String.valueOf(id) + "/0");
 					addToDoc("Fotos", null, user + ":" + id);
-					changeID(USERS + user, id);
+					changeID(USERS + user + "/" + user, id);
 
 					outStream.writeObject("Photo added\n");
 					outStream.flush();
@@ -754,9 +841,11 @@ public class SeiTchizServer {
 				} else {
 					outStream.writeObject("Photo does not exists!\n");
 				}
-				encrypt(USERS + user + ".txt");
+				encrypt(USERS + user + "/" + user + ".txt");
 				encrypt("Fotos.txt");
 			} catch(Exception e) {
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt("Fotos.txt");
 				System.out.println("Error encryption or decryption method -> post");
 			}
 
@@ -810,12 +899,12 @@ public class SeiTchizServer {
 		/**
 		 * Shows the current user his followers
 		 * @param user current user
-		 * @throws IOException
+		 * @throws Exception 
 		 */
-		private void viewFollowers(String user) throws IOException{
+		private void viewFollowers(String user) throws Exception{
 			try {
-				decrypt(USERS + user+ ".txt");
-				Scanner sc = new Scanner(new File(USERS + user+ ".txt"));
+				decrypt(USERS + user + "/" + user + ".txt");
+				Scanner sc = new Scanner(new File(USERS + user + "/" + user + ".txt"));
 				while(sc.hasNextLine()) {
 					String line = sc.nextLine();
 					String[] sp = line.split(":");
@@ -829,8 +918,9 @@ public class SeiTchizServer {
 					}
 				}
 				sc.close();
-				encrypt(USERS + user+ ".txt");
+				encrypt(USERS + user + "/" + user + ".txt");
 			} catch (Exception e) {
+				encrypt(USERS + user + "/" + user + ".txt");
 				System.out.println("Error encryption or decryption method -> viewFollowers");
 			}
 		}
@@ -839,16 +929,16 @@ public class SeiTchizServer {
 		 * Unfollows the requested profile
 		 * @param user current user
 		 * @param userASeguir user to unfollow
-		 * @throws IOException
+		 * @throws Exception 
 		 */
-		private void unfollow(String user, String userASeguir) throws IOException {
+		private void unfollow(String user, String userASeguir) throws Exception {
 			try {
-				decrypt(USERS + userASeguir + ".txt");
-				decrypt(USERS + user + ".txt");
+				decrypt(USERS + userASeguir + "/" + userASeguir + ".txt");
+				decrypt(USERS + user + "/" + user + ".txt");
 				if(users.get(userASeguir) != null) { //Caso o userASeguir exista
 					if(seguir(user, userASeguir)) {
-						removeFromDoc(USERS + userASeguir, "Seguidores", user);
-						removeFromDoc(USERS + user, "Seguindo", userASeguir);
+						removeFromDoc(USERS + userASeguir + "/" + userASeguir, "Seguidores", user);
+						removeFromDoc(USERS + user + "/" + user, "Seguindo", userASeguir);
 						outStream.writeObject("User unfollowed\n");
 					} else {
 						outStream.writeObject("User isn't being followed\n");
@@ -856,9 +946,10 @@ public class SeiTchizServer {
 				} else {
 					outStream.writeObject("User does not exist\n");
 				}
-				encrypt(USERS + userASeguir + ".txt");
-				encrypt(USERS + user + ".txt");
+				encrypt(USERS + userASeguir + "/" + userASeguir+ ".txt");
+				encrypt(USERS + user + "/" + user + ".txt");
 			} catch (Exception e) {
+				encrypt(USERS + user + "/" + user + ".txt");
 				System.out.println("Error encryption or decryption method -> unfollow");
 			}
 		}
@@ -867,16 +958,16 @@ public class SeiTchizServer {
 		 * Follows the requested profile
 		 * @param user current user
 		 * @param userASeguir user to follow
-		 * @throws IOException
+		 * @throws Exception 
 		 */
-		private void follow(String user, String userASeguir) throws IOException {
+		private void follow(String user, String userASeguir) throws Exception {
 			try {
-				decrypt(USERS + userASeguir + ".txt");
-				decrypt(USERS + user + ".txt");
+				decrypt(USERS + userASeguir + "/" + userASeguir + ".txt");
+				decrypt(USERS + user + "/" + user + ".txt");
 				if(users.get(userASeguir) != null) { //Caso o userASeguir exista
 					if(!seguir(user, userASeguir)) {
-						addToDoc(USERS + userASeguir, "Seguidores", user);
-						addToDoc(USERS + user, "Seguindo", userASeguir);
+						addToDoc(USERS + userASeguir + "/" + userASeguir, "Seguidores", user);
+						addToDoc(USERS + user + "/" + user, "Seguindo", userASeguir);
 						outStream.writeObject("User followed\n");
 					} else {
 						outStream.writeObject("User is already being followed\n");
@@ -884,9 +975,11 @@ public class SeiTchizServer {
 				} else {
 					outStream.writeObject("User does not exist\n");
 				}
-				encrypt(USERS + userASeguir + ".txt");
-				encrypt(USERS + user + ".txt");
+				encrypt(USERS + userASeguir + "/" + userASeguir + ".txt");
+				encrypt(USERS + user + "/" + user + ".txt");
 			} catch (Exception e) {
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt(USERS + userASeguir + "/" + userASeguir + ".txt");
 				System.out.println("Error encryption or decryption method -> follow");
 			}
 		}
@@ -899,7 +992,7 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 		private boolean seguir(String user, String userASeguir) throws FileNotFoundException {
-			Scanner sc = new Scanner(new File(USERS + userASeguir + ".txt"));
+			Scanner sc = new Scanner(new File(USERS + userASeguir + "/" + userASeguir + ".txt"));
 			while(sc.hasNextLine()) {
 				String line = sc.nextLine();
 				String[] sp = line.split(":");
@@ -990,13 +1083,15 @@ public class SeiTchizServer {
 		 */
 		private void registUser(String user, String certificate) throws Exception {
 			decrypt(FILE);
+			File f = new File(USERS + user + "/");
+			f.mkdir();
 			users.put(user, certificate);
 			PrintWriter pw = new PrintWriter(FILE);
 			for(String s : users.keySet()) {
 				pw.println(s + ":" + users.get(s));
 			}
 			pw.close();
-			PrintWriter t = new PrintWriter(USERS + user + ".txt");
+			PrintWriter t = new PrintWriter(USERS + user + "/" + user + ".txt");
 			t.println("User:" + user);
 			t.println("Seguidores:");
 			t.println("Seguindo:");
@@ -1005,7 +1100,7 @@ public class SeiTchizServer {
 			t.println("Grupos:");
 			t.print("Owner:");
 			t.close();
-			encrypt(USERS + user + ".txt");
+			encrypt(USERS + user + "/" + user + ".txt");
 			encrypt(FILE);
 		}
 	}
@@ -1094,7 +1189,6 @@ public class SeiTchizServer {
 		//sSoc.close();
 	}
 
-
 	private void criaPastas() {
 		for(File pasta : pastas) {
 			if(!pasta.exists()) {
@@ -1105,18 +1199,23 @@ public class SeiTchizServer {
 
 	/**
 	 * Load the users from our file
+	 * @throws Exception 
 	 * @throws FileNotFoundException
 	 */
 	private void loadUsers() throws Exception {
-		decrypt(FILE);
-		Scanner sc = new Scanner(new File(FILE));
-		while(sc.hasNextLine()) {
-			String line = sc.nextLine();
-			// user:certificate
-			String[] credencias = line.split(":");
-			users.put(credencias[0], credencias[1]);
+		try {
+			decrypt(FILE);
+			Scanner sc = new Scanner(new File(FILE));
+			while(sc.hasNextLine()) {
+				String line = sc.nextLine();
+				// user:certificate
+				String[] credencias = line.split(":");
+				users.put(credencias[0], credencias[1]);
+			}
+			sc.close();
+			encrypt(FILE);
+		} catch (Exception e) {
+			encrypt(FILE);
 		}
-		sc.close();
-		encrypt(FILE);
 	}
 }
