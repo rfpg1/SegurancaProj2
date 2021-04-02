@@ -107,16 +107,6 @@ public class SeiTchiz {
 		}
 	}
 	
-	private static byte[] encryptNonce(long nonce, String key, String pw) throws Exception {
-		PrivateKey pKey = getPrivateKey(key, pw);
-		Cipher cRSA = Cipher.getInstance("RSA"); //TODO TALVEZ METER EM FINAL
-		cRSA.init(Cipher.ENCRYPT_MODE, pKey);
-		ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-		buffer.putLong(nonce);
-		byte[] nonceBytes = buffer.array();
-		return cRSA.doFinal(nonceBytes);
-	}
-	
 	private static PrivateKey getPrivateKey(String key, String pw) throws Exception {
 		FileInputStream ins = new FileInputStream(key);
 
@@ -290,7 +280,7 @@ public class SeiTchiz {
 			if(users != null) {
 				for (String member : users.keySet()) {
 					CertificateFactory fact = CertificateFactory.getInstance("X.509");
-					FileInputStream is = new FileInputStream (CLIENT + member);
+					FileInputStream is = new FileInputStream (CLIENT + users.get(member));
 					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
 					PublicKey publicKey = cert.getPublicKey();
 					

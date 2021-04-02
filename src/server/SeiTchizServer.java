@@ -23,14 +23,11 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -90,7 +87,7 @@ public class SeiTchizServer {
 					Signature s = Signature.getInstance("MD5withRSA");
 					s.initVerify(publicKey);
 					ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-				    buffer.putLong(l);
+					buffer.putLong(l);
 					s.update(buffer.array());
 					if(s.verify(signature)) {
 						outStream.writeObject(true);
@@ -104,7 +101,7 @@ public class SeiTchizServer {
 					Signature s = Signature.getInstance("MD5withRSA");
 					s.initVerify(cert.getPublicKey());
 					ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-				    buffer.putLong(l);
+					buffer.putLong(l);
 					s.update(buffer.array());
 					if(nonce != l) {
 						outStream.writeObject(false);
@@ -210,16 +207,6 @@ public class SeiTchizServer {
 
 			} catch (Exception e) {
 			} 
-		}
-
-		private byte[] decryptNonce(byte[] nonce, PublicKey publicKey) throws ApplicationException {
-			try {
-				Cipher cRSA = Cipher.getInstance("RSA");
-				cRSA.init(Cipher.DECRYPT_MODE, publicKey);
-				return cRSA.doFinal(nonce);
-			} catch (Exception e) {
-				throw new ApplicationException("Decription Error");
-			}		
 		}
 
 		private long generateNonce() throws ApplicationException {
@@ -585,41 +572,30 @@ public class SeiTchizServer {
 						for (String member : members) {
 							m.put(member, users.get(member));
 						}
+						m.put(owner, users.get(owner));
 						outStream.writeObject(m);
-						
-						for (String member : members) {
+
+						for (String member : m.keySet()) {
 							byte[] encodedKey = (byte[]) inStream.readObject();
 							File f = new File(GRUPOS + "/" + groupID + "/" + member + ".txt");
-							FileInputStream fis = new FileInputStream(f);
-							byte[] temp = new byte[(int)f.length()];
-							fis.read(temp);
-							FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
-							
-							//TODO escrever no ficheiro
-							
+							if(f.exists()) {
+								FileInputStream fis = new FileInputStream(f);
+								byte[] temp = new byte[(int)f.length()];
+								fis.read(temp);
+								fis.close();
+								FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
+								fos.write(new String(temp));
+								String w = String.valueOf(id) + ":" + new String(encodedKey);
+								fos.write(w);
+								fos.close();
+							} else {
+								FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
+								String w = String.valueOf(id) + ":" + new String(encodedKey);
+								fos.write(w);
+								fos.close();
+							}
 						}
-						//Criar a chave
-//						KeyGenerator kg = KeyGenerator.getInstance("AES");
-//						kg.init(128);
-//						SecretKey key = kg.generateKey();
-						
-						
-//						for(String member : members) {
-//							Cipher cRSA = Cipher.getInstance("RSA");
-//							PublicKey publicKey = getCertificate(member).getPublicKey();
-//							cRSA.init(Cipher.WRAP_MODE, publicKey);
-//							byte[] encodedKey = cRSA.wrap(key);
-//							FileOutputStream fos = new FileOutputStream(USERS + member + "/" + groupID + id + ".key");
-//							fos.write(encodedKey);
-//							fos.close();
-//						}
-//						Cipher cRSA = Cipher.getInstance("RSA");
-//						PublicKey publicKey = getCertificate(owner).getPublicKey();
-//						cRSA.init(Cipher.WRAP_MODE, publicKey);
-//						byte[] encodedKey = cRSA.wrap(key);
-//						FileOutputStream fos = new FileOutputStream(USERS + owner + "/" + groupID + id + ".key");
-//						fos.write(encodedKey);
-//						fos.close();
+
 						outStream.writeObject("Member added\n");
 					} else {
 						outStream.writeObject(null);
@@ -639,7 +615,7 @@ public class SeiTchizServer {
 				System.out.println("Error encryption or decryption method -> addNewMember");
 			}
 		}
-		
+
 		/**
 		 * Creates a new group
 		 * Sends a message if the groupID already exists
@@ -665,12 +641,12 @@ public class SeiTchizServer {
 					pw.print("Chat:\n");
 					pw.close();
 					outStream.writeObject("Group created\n");
-					
+
 					byte[] encodedKey = (byte[]) inStream.readObject();
 					File f = new File(GRUPOS + groupID + "/");
 					f.mkdir();
 					FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + user + ".txt");
-					
+
 					String temp = "0:" + new String(encodedKey);
 					fos.write(temp);
 					fos.close();
@@ -687,22 +663,6 @@ public class SeiTchizServer {
 			}
 		}
 
-		private Certificate getCertificate(String user) throws Exception {
-			try {
-				decrypt(FILE);
-				String certFile = getFromDoc("Users", user);
-				CertificateFactory fact = CertificateFactory.getInstance("X.509");
-				FileInputStream is = new FileInputStream (CLIENT + certFile);
-				X509Certificate cer = (X509Certificate) fact.generateCertificate(is);
-				encrypt(FILE);
-				return cer;
-			} catch (Exception e) {
-				encrypt(FILE);
-				System.out.println("Error encryption or decryption method -> getCertificate");
-			}
-			return null;
-		}
-		
 		/**
 		 * Likes a photo 
 		 * @param user user liking the photo
@@ -1227,16 +1187,19 @@ public class SeiTchizServer {
 				pasta.mkdir();
 			}
 		}
-		PrintWriter pw;
-		try {
-			pw = new PrintWriter("Grupos.txt");
-			pw.print("Grupos:");
-			pw.close();
-			encrypt("Grupos.txt");
-		} catch (FileNotFoundException e) {
-			System.out.println("Grupos nah existe");
-		} catch (Exception e) {
-			System.out.println("Error on encrypt -> createFolder");
+		File f = new File("Grupos.txt");
+		if(f.length() <= 0) {
+			PrintWriter pw;
+			try {
+				pw = new PrintWriter("Grupos.txt");
+				pw.print("Grupos:");
+				pw.close();
+				encrypt("Grupos.txt");
+			} catch (FileNotFoundException e) {
+				System.out.println("Grupos nah existe");
+			} catch (Exception e) {
+				System.out.println("Error on encrypt -> createFolder");
+			}
 		}
 	}
 
