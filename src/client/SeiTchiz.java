@@ -11,11 +11,20 @@ import java.io.OutputStream;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.security.KeyStore;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.HashMap;
 import java.util.Scanner;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -50,9 +59,13 @@ public class SeiTchiz {
 			inStream = new ObjectInputStream(socket.getInputStream());
 			long nonce = (long) inStream.readObject();
 			boolean registered = (boolean) inStream.readObject();
-			byte[] nonceEncrypted = encryptNonce(nonce, keyStore, keyStorePassword);
+			Signature signature = Signature.getInstance("MD5withRSA");
+			signature.initSign(getPrivateKey(keyStore, keyStorePassword));
+			ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+		    buffer.putLong(nonce);
+		    signature.update(buffer.array());
 			if(registered) {
-				outStream.writeObject(nonceEncrypted);
+				outStream.writeObject(signature.sign());
 				boolean b = (boolean) inStream.readObject();
 				if(b) {
 					System.out.println("Authentication was successful");
@@ -62,7 +75,7 @@ public class SeiTchiz {
 				}
 			} else {
 				outStream.writeObject(nonce);
-				outStream.writeObject(nonceEncrypted);
+				outStream.writeObject(signature.sign());
 				Certificate cert = getCertificate(keyStore, keyStorePassword);
 				outStream.writeObject(cert);
 				boolean b = (boolean) inStream.readObject();
@@ -77,7 +90,7 @@ public class SeiTchiz {
 			do {
 				printOptions(); //Prints all the options the user can do
 				line = sc.nextLine(); 
-				pedido(line); // Process the request
+				pedido(line, keyStore, keyStorePassword); // Process the request
 			} while(!line.equals("quit"));
 
 			socket.close();
@@ -131,7 +144,7 @@ public class SeiTchiz {
 	 * @throws ClassNotFoundException
 	 */
 	
-	private static void pedido(String line) throws IOException, ClassNotFoundException {
+	private static void pedido(String line, String keyStore, String keyStorePassword) throws IOException, ClassNotFoundException {
 		String[] t = line.split("\\s+");
 		//Switch with every request possible
 		switch(t[0]) {
@@ -193,6 +206,7 @@ public class SeiTchiz {
 		case "newgroup":
 			if(t.length == 2) {
 				outStream.writeObject(line);
+				newGroup(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -202,6 +216,7 @@ public class SeiTchiz {
 		case "addu":
 			if(t.length == 3) {
 				outStream.writeObject(line);
+				addNewUser(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -263,6 +278,54 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static void addNewUser(String keyStore, String keyStorePassword) {
+		try {
+			//Criar a chave
+			KeyGenerator kg = KeyGenerator.getInstance("AES");
+			kg.init(128);
+			SecretKey key = kg.generateKey();
+			
+			@SuppressWarnings("unchecked")
+			HashMap<String, String> users = (HashMap<String, String>) inStream.readObject();
+			if(users != null) {
+				for (String member : users.keySet()) {
+					CertificateFactory fact = CertificateFactory.getInstance("X.509");
+					FileInputStream is = new FileInputStream (CLIENT + member);
+					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
+					PublicKey publicKey = cert.getPublicKey();
+					
+					Cipher cRSA = Cipher.getInstance("RSA");
+					cRSA.init(Cipher.WRAP_MODE, publicKey);
+					byte[] encodedKey = cRSA.wrap(key);
+					outStream.writeObject(encodedKey);
+				}
+			}
+		} catch (Exception e) {
+			
+		}
+	}
+
+	private static void newGroup(String keyStore, String keyStorePassword) {
+		try {
+			//Criar a chave
+			KeyGenerator kg = KeyGenerator.getInstance("AES");
+			kg.init(128);
+			SecretKey key = kg.generateKey();
+			
+			Cipher cRSA = Cipher.getInstance("RSA");
+			PublicKey publicKey = getCertificate(keyStore, keyStorePassword).getPublicKey();
+			cRSA.init(Cipher.WRAP_MODE, publicKey);
+			byte[] encodedKey = cRSA.wrap(key);
+			outStream.writeObject(encodedKey);
+		} catch (NoSuchAlgorithmException e) {
+			
+		} catch (NoSuchPaddingException e) {
+			
+		} catch (Exception e) {
+			
+		}
+	}
+
 	/**
 	 * Sends a photo through the socket to a server
 	 * @param line line with the path to the photo

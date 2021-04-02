@@ -1,10 +1,10 @@
 package server;
-//TODO New-group depois de explicação de alguém!
 //TODO ID do grupo passar a chamar LastMessage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
@@ -17,11 +17,13 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.Signature;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
@@ -43,8 +45,9 @@ public class SeiTchizServer {
 	private final String FOTOS = "Fotos/";
 	private final String USERS = "Users/";
 	private final String CLIENT = "client/";
+	private final String CERTIFICADOS = "Certificados/";
 	private HashMap<String, String> users = new HashMap<>();
-	private final File[] pastas = {new File("Fotos"), new File("Grupos"), new File("Users")};
+	private final File[] pastas = {new File("Fotos"), new File("Grupos"), new File("Users"), new File("Certificados")};
 	private String keyStore;
 	private String keyStorePassword;
 
@@ -78,30 +81,43 @@ public class SeiTchizServer {
 				outStream.writeObject(l);
 				outStream.writeObject(registered);
 				if(registered) {
-					byte[] nonceEncrypted =  (byte[]) inStream.readObject();
+					//byte[] nonceEncrypted =  (byte[]) inStream.readObject();
+					byte signature[] = (byte[]) inStream.readObject();
 					CertificateFactory fact = CertificateFactory.getInstance("X.509");
 					FileInputStream is = new FileInputStream (CLIENT + users.get(user));
 					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
-					byte[] nonceB = decryptNonce(nonceEncrypted, cert.getPublicKey());
-					ByteBuffer bb = ByteBuffer.wrap(nonceB);
-					long t = bb.getLong();
-					if(l == t) {
+					PublicKey publicKey = cert.getPublicKey();
+					Signature s = Signature.getInstance("MD5withRSA");
+					s.initVerify(publicKey);
+					ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+				    buffer.putLong(l);
+					s.update(buffer.array());
+					if(s.verify(signature)) {
 						outStream.writeObject(true);
 					} else {
 						outStream.writeObject(false);
 					}
 				} else {
 					long nonce = (long) inStream.readObject();
-					byte[] nonceEncrypted =  (byte[]) inStream.readObject();
+					byte signature[] = (byte[]) inStream.readObject();
 					Certificate cert = (Certificate) inStream.readObject();
-					byte[] nonceB = decryptNonce(nonceEncrypted, cert.getPublicKey());
-					ByteBuffer bb = ByteBuffer.wrap(nonceB);
-					long t = bb.getLong();
-					if(nonce == t) {
-						registUser(user, "certClient" + user + ".cer");
-						outStream.writeObject(true);
-					} else {
+					Signature s = Signature.getInstance("MD5withRSA");
+					s.initVerify(cert.getPublicKey());
+					ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+				    buffer.putLong(l);
+					s.update(buffer.array());
+					if(nonce != l) {
 						outStream.writeObject(false);
+					} else {
+						if(s.verify(signature)) {
+							registUser(user, "certClient" + user + ".cer");
+							FileOutputStream fos = new FileOutputStream(CERTIFICADOS + "certClient" + user + ".cer");
+							fos.write(cert.getEncoded());
+							fos.close();
+							outStream.writeObject(true);
+						} else {
+							outStream.writeObject(false);
+						}
 					}
 				}
 				boolean b = true;
@@ -559,38 +575,58 @@ public class SeiTchizServer {
 						int gID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
 						addToDoc(GRUPOS + groupID, "Members", userID);
 						addToDoc(USERS + userID + "/" + userID, "Grupos", groupID + "/" +  gID + "/" + gID);
-						//Criar a chave
-						KeyGenerator kg = KeyGenerator.getInstance("AES");
-						kg.init(128);
-						SecretKey key = kg.generateKey();
-						
 						String i = getFromDoc(GRUPOS + groupID, "Identificador");
 						int id = Integer.parseInt(i.substring(0, i.length() - 1));
 						removeFromDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
 						id++;
 						addToDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
 						members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-						for(String member : members) {
-							Cipher cRSA = Cipher.getInstance("RSA");
-							PublicKey publicKey = getCertificate(member).getPublicKey();
-							cRSA.init(Cipher.WRAP_MODE, publicKey);
-							byte[] encodedKey = cRSA.wrap(key);
-							FileOutputStream fos = new FileOutputStream(USERS + member + "/" + groupID + id + ".key");
-							fos.write(encodedKey);
-							fos.close();
+						HashMap<String, String> m = new HashMap<>();
+						for (String member : members) {
+							m.put(member, users.get(member));
 						}
-						Cipher cRSA = Cipher.getInstance("RSA");
-						PublicKey publicKey = getCertificate(owner).getPublicKey();
-						cRSA.init(Cipher.WRAP_MODE, publicKey);
-						byte[] encodedKey = cRSA.wrap(key);
-						FileOutputStream fos = new FileOutputStream(USERS + owner + "/" + groupID + id + ".key");
-						fos.write(encodedKey);
-						fos.close();
+						outStream.writeObject(m);
+						
+						for (String member : members) {
+							byte[] encodedKey = (byte[]) inStream.readObject();
+							File f = new File(GRUPOS + "/" + groupID + "/" + member + ".txt");
+							FileInputStream fis = new FileInputStream(f);
+							byte[] temp = new byte[(int)f.length()];
+							fis.read(temp);
+							FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
+							
+							//TODO escrever no ficheiro
+							
+						}
+						//Criar a chave
+//						KeyGenerator kg = KeyGenerator.getInstance("AES");
+//						kg.init(128);
+//						SecretKey key = kg.generateKey();
+						
+						
+//						for(String member : members) {
+//							Cipher cRSA = Cipher.getInstance("RSA");
+//							PublicKey publicKey = getCertificate(member).getPublicKey();
+//							cRSA.init(Cipher.WRAP_MODE, publicKey);
+//							byte[] encodedKey = cRSA.wrap(key);
+//							FileOutputStream fos = new FileOutputStream(USERS + member + "/" + groupID + id + ".key");
+//							fos.write(encodedKey);
+//							fos.close();
+//						}
+//						Cipher cRSA = Cipher.getInstance("RSA");
+//						PublicKey publicKey = getCertificate(owner).getPublicKey();
+//						cRSA.init(Cipher.WRAP_MODE, publicKey);
+//						byte[] encodedKey = cRSA.wrap(key);
+//						FileOutputStream fos = new FileOutputStream(USERS + owner + "/" + groupID + id + ".key");
+//						fos.write(encodedKey);
+//						fos.close();
 						outStream.writeObject("Member added\n");
 					} else {
+						outStream.writeObject(null);
 						outStream.writeObject("Member is already in group\n");
 					}
 				} else {
+					outStream.writeObject(null);
 					outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to add yourself\n");
 				}
 				encrypt(USERS + userID + "/" + userID + ".txt");
@@ -603,7 +639,7 @@ public class SeiTchizServer {
 				System.out.println("Error encryption or decryption method -> addNewMember");
 			}
 		}
-
+		
 		/**
 		 * Creates a new group
 		 * Sends a message if the groupID already exists
@@ -629,17 +665,14 @@ public class SeiTchizServer {
 					pw.print("Chat:\n");
 					pw.close();
 					outStream.writeObject("Group created\n");
-					//Criar a chave
-					KeyGenerator kg = KeyGenerator.getInstance("AES");
-					kg.init(128);
-					SecretKey key = kg.generateKey();
-					//Criar o cipher
-					Cipher cRSA = Cipher.getInstance("RSA");
-					PublicKey publicKey = getCertificate(user).getPublicKey();
-					cRSA.init(Cipher.WRAP_MODE, publicKey);
-					byte[] encodedKey = cRSA.wrap(key);
-					FileOutputStream fos = new FileOutputStream(USERS + user + "/" + groupID + "0.key");
-					fos.write(encodedKey);
+					
+					byte[] encodedKey = (byte[]) inStream.readObject();
+					File f = new File(GRUPOS + groupID + "/");
+					f.mkdir();
+					FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + user + ".txt");
+					
+					String temp = "0:" + new String(encodedKey);
+					fos.write(temp);
 					fos.close();
 					encrypt(USERS + user + "/" + user+ ".txt");
 					encrypt(GRUPOS + groupID + ".txt");
@@ -669,8 +702,7 @@ public class SeiTchizServer {
 			}
 			return null;
 		}
-
-
+		
 		/**
 		 * Likes a photo 
 		 * @param user user liking the photo
@@ -678,20 +710,20 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 * @requires photoID has to be like User:PhotoID
 		 */
-//TODO mudar as pastas
+
 		private void like(String user, String photoID) throws IOException { //photoID Ã© user:id
 			try {
 				String[] profilePhoto = photoID.split(":");
-				decrypt(USERS + profilePhoto[0] + ".txt");
+				decrypt(USERS + profilePhoto[0] + "/" + profilePhoto[0] + ".txt");
 				if(verifyUser(profilePhoto[0])) {
 					boolean b = false;
-					String[] photos = getFromDoc(USERS + profilePhoto[0], "Fotos").split(",");
+					String[] photos = getFromDoc(USERS + profilePhoto[0] + "/" + profilePhoto[0] , "Fotos").split(",");
 					for(String photo : photos) {
 						if(photo.split("/")[0].equals(profilePhoto[1])) {
-							removeFromDoc(USERS + profilePhoto[0], "Fotos", photo);
+							removeFromDoc(USERS + profilePhoto[0] + "/" + profilePhoto[0], "Fotos", photo);
 							int likes = Integer.parseInt(photo.split("/")[1]) + 1;
 							String newInfo = photo.split("/")[0] + "/" + likes;
-							addToDoc(USERS + profilePhoto[0], "Fotos", newInfo);
+							addToDoc(USERS + profilePhoto[0] + "/" + profilePhoto[0], "Fotos", newInfo);
 							b = true;
 						}
 					}
@@ -703,7 +735,7 @@ public class SeiTchizServer {
 				} else {
 					outStream.writeObject("User does not exist!\n");
 				}
-				encrypt(USERS + profilePhoto[0] + ".txt");
+				encrypt(USERS + profilePhoto[0] + "/" + profilePhoto[0] + ".txt");
 			} catch(Exception e) {
 				System.out.println("Error encryption or decryption method -> like");
 			}	
@@ -1173,7 +1205,7 @@ public class SeiTchizServer {
 		this.keyStorePassword = keyStorePassword;
 		try {
 			loadUsers();
-			criaPastas();
+			createFolder();
 			ss = (SSLServerSocket) ssf.createServerSocket(port);
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -1189,11 +1221,22 @@ public class SeiTchizServer {
 		//sSoc.close();
 	}
 
-	private void criaPastas() {
+	private void createFolder() {
 		for(File pasta : pastas) {
 			if(!pasta.exists()) {
 				pasta.mkdir();
 			}
+		}
+		PrintWriter pw;
+		try {
+			pw = new PrintWriter("Grupos.txt");
+			pw.print("Grupos:");
+			pw.close();
+			encrypt("Grupos.txt");
+		} catch (FileNotFoundException e) {
+			System.out.println("Grupos nah existe");
+		} catch (Exception e) {
+			System.out.println("Error on encrypt -> createFolder");
 		}
 	}
 
