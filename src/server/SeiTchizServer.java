@@ -232,20 +232,25 @@ public class SeiTchizServer {
 		 * if user isn't part of that group a message is sent
 		 * @param user user logged in
 		 * @param groupID gets the all messages from this group
-		 * @throws IOException 
+		 * @throws Exception 
 		 */
 
-		private void history(String user, String groupID) throws IOException {
+		private void history(String user, String groupID) throws Exception {
 			try {
+				decrypt("Grupos.txt");
+				decrypt(GRUPOS + groupID + ".txt");
+				decrypt(USERS + user + "/" + user + ".txt");
 				List<String> gruposAux = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
 				List<String> membersAux = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
 				if (!gruposAux.contains(groupID)) { // Grupo n�o existe
+					outStream.writeObject(false);
 					outStream.writeObject(groupID + " does not exist");
 					// Caso o user n�o fa�a parte do grupo nem � o owner
 				} else if (!membersAux.contains(user) && !getFromDoc(GRUPOS + groupID, "Owner").equals(user)) {
+					outStream.writeObject(false);
 					outStream.writeObject("You are not a member of group " + groupID);
 				} else { // Tudo correu bem
-					String[] grupos = getFromDoc(USERS + user, "Grupos").split(",");
+					String[] grupos = getFromDoc(USERS + user + "/" + user, "Grupos").split(",");
 					int idHistory = 0;
 					int idCollect = 0;
 					for(String grupo : grupos) {
@@ -255,24 +260,35 @@ public class SeiTchizServer {
 							idHistory = Integer.parseInt(info[2]); // Vai buscar o ID de quando ele entrou para o grupo
 						}
 					}
-					Scanner sc = new Scanner(new File(USERS + user + ".txt"));
+					Scanner sc = new Scanner(new File(USERS + user + "/" + user + ".txt"));
 					StringBuilder bob = new StringBuilder();
 					String[] chat = getChat(groupID); // Vai buscar todo o chat do grupo
 					for (int i = idHistory; i < idCollect; i++) {
 						bob.append(chat[i] + "\n");
 					}
 					if(bob.toString().equals("")) {
+						outStream.writeObject(false);
 						outStream.writeObject("Zero messages in your personal history of group" + groupID + "\n");
 					} else {
+						outStream.writeObject(true);
 						outStream.writeObject(bob.toString());
 					}
 					sc.close();
 				}
+				encrypt("Grupos.txt");
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
 			} catch (FileNotFoundException e) {
 				System.out.println("Ficheiro n�o existe");
+				outStream.writeObject(false);
 				outStream.writeObject("Group does not exist\n");
 			} catch (IOException e) {
-				e.printStackTrace();
+				
+			} catch (Exception e) {
+				encrypt("Grupos.txt");
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				
 			}
 
 		}

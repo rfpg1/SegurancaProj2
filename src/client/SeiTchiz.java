@@ -260,7 +260,8 @@ public class SeiTchiz {
 		case "history":
 			if(t.length == 2) {
 				outStream.writeObject(line);
-				System.out.println((String) inStream.readObject());
+				if(!history(t[1], user, keyStore, keyStorePassword))
+					System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
 			}
@@ -276,6 +277,25 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static boolean history(String groupID, String user, String keyStore, String keyStorePassword) {
+		try {
+			boolean b = (boolean) inStream.readObject();
+			if(b) {
+				String[] message = ((String) inStream.readObject()).split("\n");
+				StringBuilder bob = new StringBuilder();
+				for (String m : message) {
+					bob.append(decryptMessage(m, groupID, user, keyStore, keyStorePassword));
+					bob.append("\n");
+				}
+				System.out.println(bob.toString());
+			}
+			return b;
+		} catch(Exception e) {
+			return false;
+		}
+		
+	}
+
 	private static boolean collect(String groupID, String user, String keyStoreFile, String keyStorePassword) {
 		try {
 			boolean b = (boolean) inStream.readObject();
