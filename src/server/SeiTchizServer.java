@@ -23,6 +23,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
@@ -167,11 +168,14 @@ public class SeiTchizServer {
 						break;
 					case "m":
 					case "msg":
-						StringBuilder bob = new StringBuilder();
-						for (int i = 2; i < line.length; i++) {
-							bob.append(line[i] + " ");
-						}
-						msg(user, line[1], bob.toString());
+//						StringBuilder bob = new StringBuilder();
+//						for (int i = 2; i < line.length; i++) {
+//							bob.append(line[i] + " ");
+//						}
+						//msg(user, line[1], bob.toString());
+						byte[] msgEncoded = (byte[]) inStream.readObject();
+						int id = (int) inStream.readObject();
+						
 						break;
 					case "c":
 					case "collect":
@@ -390,24 +394,34 @@ public class SeiTchizServer {
 		 * @param user user sending the message
 		 * @param groupID group the message is sent to
 		 * @param msg message sent to a group
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void msg(String user, String groupID, String msg) throws IOException {
-			List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
-			if(grupos.contains(groupID)) {
-				List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-				if(members.contains(user) || getFromDoc(GRUPOS + groupID, "Owner").equals(user)) {
-					int id = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
-					id++;
-					changeID(GRUPOS + groupID, id);
-					newMessage(groupID, "Chat", msg);
-					outStream.writeObject("Message received!\n");					
+		private void msg(String user, String groupID, String msg) throws Exception {
+			try {
+				decrypt("Grupos.txt");
+				decrypt(GRUPOS + groupID + ".txt");
+				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
+				if(grupos.contains(groupID)) {
+					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
+					if(members.contains(user) || getFromDoc(GRUPOS + groupID, "Owner").equals(user)) {
+						int id = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+						id++;
+						changeID(GRUPOS + groupID, id);
+						newMessage(groupID, "Chat", msg);
+						outStream.writeObject("Message received!\n");					
+					} else {
+						outStream.writeObject("You are not in that group!\n");
+					}
 				} else {
-					outStream.writeObject("You are not in that group!\n");
+					outStream.writeObject("Group does not exist!\n");
 				}
-			} else {
-				outStream.writeObject("Group does not exist!\n");
+				encrypt("Grupos.txt");
+				encrypt(GRUPOS + groupID + ".txt");
+			} catch (Exception e) {
+				encrypt("Grupos.txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				System.out.println("Error encryption or decryption method -> msg");
 			}
 		}
 
@@ -572,7 +586,7 @@ public class SeiTchizServer {
 							fis.close();
 							FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
 							fos.write(new String(temp));
-							String w = String.valueOf(id) + ":" + new String(encodedKey);
+							String w = String.valueOf(id) + ":" + Base64.getEncoder().encodeToString(encodedKey);
 							fos.write(w);
 							fos.close();
 						}
@@ -641,13 +655,13 @@ public class SeiTchizServer {
 								fis.read(temp);
 								fis.close();
 								FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
-								fos.write(new String(temp));
-								String w = String.valueOf(id) + ":" + new String(encodedKey);
+								fos.write(new String(temp) + "\n");
+								String w = String.valueOf(id) + ":" + Base64.getEncoder().encodeToString(encodedKey);
 								fos.write(w);
 								fos.close();
 							} else {
 								FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
-								String w = String.valueOf(id) + ":" + new String(encodedKey);
+								String w = String.valueOf(id) + ":" + Base64.getEncoder().encodeToString(encodedKey);
 								fos.write(w);
 								fos.close();
 							}
@@ -704,7 +718,7 @@ public class SeiTchizServer {
 					f.mkdir();
 					FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + user + ".txt");
 
-					String temp = "0:" + new String(encodedKey);
+					String temp = "0:" + Base64.getEncoder().encodeToString(encodedKey);
 					fos.write(temp);
 					fos.close();
 					encrypt(USERS + user + "/" + user+ ".txt");

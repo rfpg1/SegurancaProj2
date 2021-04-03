@@ -18,6 +18,7 @@ import java.security.Signature;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Scanner;
 
@@ -25,6 +26,7 @@ import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -90,7 +92,7 @@ public class SeiTchiz {
 			do {
 				printOptions(); //Prints all the options the user can do
 				line = sc.nextLine(); 
-				pedido(line, keyStore, keyStorePassword); // Process the request
+				pedido(line, id, keyStore, keyStorePassword); // Process the request
 			} while(!line.equals("quit"));
 
 			socket.close();
@@ -130,11 +132,10 @@ public class SeiTchiz {
 	/**
 	 * Processes the request of the user
 	 * @param line String with the method in the first position after a split by spaces
-	 * @throws IOException 
-	 * @throws ClassNotFoundException
+	 * @throws Exception 
 	 */
 	
-	private static void pedido(String line, String keyStore, String keyStorePassword) throws IOException, ClassNotFoundException {
+	private static void pedido(String line, String user, String keyStore, String keyStorePassword) throws Exception {
 		String[] t = line.split("\\s+");
 		//Switch with every request possible
 		switch(t[0]) {
@@ -234,7 +235,12 @@ public class SeiTchiz {
 		case "m":
 		case "msg":
 			if(t.length >= 3) {
-				outStream.writeObject(line);
+				//outStream.writeObject(line);
+				byte[] msgEncoded = msg(line, user, keyStore, keyStorePassword);
+				int id = getID(line, user);
+				outStream.writeObject(t[0] + " " + t[1]);
+				outStream.writeObject(msgEncoded);
+				outStream.writeObject(id);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -269,6 +275,58 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static int getID(String l, String user) throws FileNotFoundException {
+		String[] line = l.split("\\s+");
+		StringBuilder bob = new StringBuilder();
+		for (int i = 2; i < line.length; i++) {
+			bob.append(line[i] + " ");
+		}
+		File f = new File("Grupos/" + line[1] + "/" + user + ".txt");
+		String lastLine = "";
+		Scanner sc = new Scanner(f);
+		while(sc.hasNextLine()) {
+			lastLine = sc.nextLine();
+		}
+		sc.close();
+		int id = Integer.parseInt(Character.toString(lastLine.charAt(0)));
+		return id;
+	}
+
+	private static byte[] msg(String l, String user, String keyStoreFile, String keyStorePassword) throws Exception {
+		String[] line = l.split("\\s+");
+		StringBuilder bob = new StringBuilder();
+		for (int i = 2; i < line.length; i++) {
+			bob.append(line[i] + " ");
+		}
+		File f = new File("Grupos/" + line[1] + "/" + user + ".txt");
+		String lastLine = "";
+		Scanner sc = new Scanner(f);
+		while(sc.hasNextLine()) {
+			lastLine = sc.nextLine();
+		}
+		sc.close();
+
+		lastLine = lastLine.substring(2, lastLine.length());
+		
+		FileInputStream ins = new FileInputStream(keyStoreFile);
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+		
+		Cipher cRSA = Cipher.getInstance("RSA");
+		cRSA.init(Cipher.UNWRAP_MODE, privateKey);
+		byte[] key = Base64.getDecoder().decode(lastLine);
+		byte[] keyEncoded = cRSA.doFinal(key);
+		
+		SecretKeySpec keySpec = new SecretKeySpec(keyEncoded, "AES");
+		Cipher cAES = Cipher.getInstance("AES");
+		cAES.init(Cipher.ENCRYPT_MODE, keySpec);
+		byte[] msgEncoded = cAES.doFinal(bob.toString().getBytes());
+		
+		return msgEncoded;
+	}
+
 	private static void removeMember(String keyStore, String keyStorePassword) {
 		try {
 			//Criar a chave
