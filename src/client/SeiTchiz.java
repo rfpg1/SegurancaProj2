@@ -10,6 +10,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.security.Key;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -235,7 +236,6 @@ public class SeiTchiz {
 		case "m":
 		case "msg":
 			if(t.length >= 3) {
-				//outStream.writeObject(line);
 				byte[] msgEncoded = msg(line, user, keyStore, keyStorePassword);
 				int id = getID(line, user);
 				outStream.writeObject(t[0] + " " + t[1]);
@@ -250,7 +250,8 @@ public class SeiTchiz {
 		case "collect":
 			if(t.length == 2) {
 				outStream.writeObject(line);
-				System.out.println((String) inStream.readObject());
+				if(!collect(t[1], user, keyStore, keyStorePassword))
+					System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
 			}
@@ -275,6 +276,67 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static boolean collect(String groupID, String user, String keyStoreFile, String keyStorePassword) {
+		try {
+			boolean b = (boolean) inStream.readObject();
+			if(b) {
+				String[] message = ((String) inStream.readObject()).split("\n");
+				StringBuilder bob = new StringBuilder();
+				bob.append("Messages:\n");
+				for (String m : message) {
+					bob.append(decryptMessage(m, groupID, user, keyStoreFile, keyStorePassword));
+					bob.append("\n");
+				}
+				System.out.println(bob.toString());
+			}
+			return b;
+		} catch(Exception e) {
+			
+			return false;
+		}
+	}
+
+	private static String decryptMessage(String m, String groupID, String user, String keyStoreFile, String keyStorePassword) throws FileNotFoundException {
+		try {
+			String id = Character.toString(m.charAt(0));
+			m = m.substring(2, m.length());
+			byte[] messageEncoded = Base64.getDecoder().decode(m);
+			File f = new File("Grupos/" + groupID + "/" + user + ".txt");
+			Scanner sc = new Scanner(f);
+			String line = "";
+			while(sc.hasNextLine()) {
+				line = sc.nextLine();
+				if(line.startsWith(id)) {
+					line = line.substring(2, line.length());
+					break;
+				}
+			}
+			sc.close();
+			byte[] key = Base64.getDecoder().decode(line);
+			
+			FileInputStream ins = new FileInputStream(keyStoreFile);
+			KeyStore keyStore = KeyStore.getInstance("JCEKS");
+			keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
+			String alias = keyStore.aliases().asIterator().next();
+			PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+			
+			Cipher cRSA = Cipher.getInstance("RSA");
+			cRSA.init(Cipher.UNWRAP_MODE, privateKey);
+			
+			Key keyEncoded = cRSA.unwrap(key, "RSA", Cipher.SECRET_KEY);
+			SecretKeySpec keySpec = new SecretKeySpec(keyEncoded.getEncoded(), "AES");
+			Cipher cAES = Cipher.getInstance("AES");
+			cAES.init(Cipher.DECRYPT_MODE, keySpec);
+			
+			byte[] msg = cAES.doFinal(messageEncoded);
+			String s = new String(msg);
+			return s;
+		} catch (Exception e) {
+			
+		}		
+		return null;
+	}
+
 	private static int getID(String l, String user) throws FileNotFoundException {
 		String[] line = l.split("\\s+");
 		StringBuilder bob = new StringBuilder();
@@ -317,9 +379,9 @@ public class SeiTchiz {
 		Cipher cRSA = Cipher.getInstance("RSA");
 		cRSA.init(Cipher.UNWRAP_MODE, privateKey);
 		byte[] key = Base64.getDecoder().decode(lastLine);
-		byte[] keyEncoded = cRSA.doFinal(key);
+		Key keyEncoded = cRSA.unwrap(key, "RSA", Cipher.SECRET_KEY);
 		
-		SecretKeySpec keySpec = new SecretKeySpec(keyEncoded, "AES");
+		SecretKeySpec keySpec = new SecretKeySpec(keyEncoded.getEncoded(), "AES");
 		Cipher cAES = Cipher.getInstance("AES");
 		cAES.init(Cipher.ENCRYPT_MODE, keySpec);
 		byte[] msgEncoded = cAES.doFinal(bob.toString().getBytes());

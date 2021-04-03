@@ -1,5 +1,6 @@
 package server;
 //TODO ID do grupo passar a chamar LastMessage;
+//TODO poder apagar os ficheiros à campeão
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -42,7 +43,6 @@ public class SeiTchizServer {
 	private final String GRUPOS = "Grupos/";
 	private final String FOTOS = "Fotos/";
 	private final String USERS = "Users/";
-	private final String CLIENT = "client/";
 	private final String CERTIFICADOS = "Certificados/";
 	private HashMap<String, String> users = new HashMap<>();
 	private final File[] pastas = {new File("Fotos"), new File("Grupos"), new File("Users"), new File("Certificados")};
@@ -82,7 +82,7 @@ public class SeiTchizServer {
 					//byte[] nonceEncrypted =  (byte[]) inStream.readObject();
 					byte signature[] = (byte[]) inStream.readObject();
 					CertificateFactory fact = CertificateFactory.getInstance("X.509");
-					FileInputStream is = new FileInputStream (CLIENT + users.get(user));
+					FileInputStream is = new FileInputStream (CERTIFICADOS + users.get(user));
 					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
 					PublicKey publicKey = cert.getPublicKey();
 					Signature s = Signature.getInstance("MD5withRSA");
@@ -168,14 +168,9 @@ public class SeiTchizServer {
 						break;
 					case "m":
 					case "msg":
-//						StringBuilder bob = new StringBuilder();
-//						for (int i = 2; i < line.length; i++) {
-//							bob.append(line[i] + " ");
-//						}
-						//msg(user, line[1], bob.toString());
 						byte[] msgEncoded = (byte[]) inStream.readObject();
 						int id = (int) inStream.readObject();
-						
+						msg(user, line[1], msgEncoded, id);
 						break;
 					case "c":
 					case "collect":
@@ -288,41 +283,60 @@ public class SeiTchizServer {
 		 * if user isn't part of that group a message is sent
 		 * @param user user to collect the messages
 		 * @param groupID group to collect the messages
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void collect (String user, String groupID) throws IOException {
-			if (!getFromDoc("Grupos", "Grupos").contains(groupID)) { // Verifica se o grupo existe
-				outStream.writeObject(groupID + " does not exist\n");
-			} else if (!getFromDoc(USERS + user, "Grupos").contains(groupID) && 
-					// Verifica se o user faz parte do grupo, como owner ou membro
-					!getFromDoc(GRUPOS + groupID, "Owner").equals(user)) { 
-				outStream.writeObject("You are not in the group " + groupID);
-			} else {
-				String[] grupos = getFromDoc(USERS + user, "Grupos").split(","); //Vai buscar todos os grupos do user
-				int currID = 0;
-				for (String i : grupos) {
-					String[] g = i.split("/");
-					if (g[0].equals(groupID)) {
-						currID = Integer.parseInt(g[1]); 
+		private void collect (String user, String groupID) throws Exception {
+			try {
+				decrypt("Grupos.txt");
+				decrypt(USERS + user + "/" + user + ".txt");
+				decrypt(GRUPOS + groupID + ".txt");
+				if (!getFromDoc("Grupos", "Grupos").contains(groupID)) { // Verifica se o grupo existe
+					outStream.writeObject(false);
+					outStream.writeObject(groupID + " does not exist\n");
+				} else if (!getFromDoc(USERS + user + "/" + user, "Grupos").contains(groupID) && 
+						// Verifica se o user faz parte do grupo, como owner ou membro
+						!getFromDoc(GRUPOS + groupID, "Owner").equals(user)) { 
+					outStream.writeObject(false);
+					outStream.writeObject("You are not in the group " + groupID);
+				} else {
+					String[] grupos = getFromDoc(USERS + user + "/" + user, "Grupos").split(","); //Vai buscar todos os grupos do user
+					int currID = 0;
+					for (String i : grupos) {
+						String[] g = i.split("/");
+						if (g[0].equals(groupID)) {
+							currID = Integer.parseInt(g[1]); 
+						}
+					}
+					int lastID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+					String[] chat = getChat(groupID);
+					if (chat.length == 0) {
+						outStream.writeObject(false);
+						outStream.writeObject("Chat doesn't contain any message\n");
+					} 
+					StringBuilder bob = new StringBuilder();
+					for (int i = currID; i < lastID; i++) {
+						bob.append(chat[i] + "\n");	            	
+					}
+					if(bob.toString().equals("")){
+						outStream.writeObject(false);
+						outStream.writeObject("There are no new messages\n");
+					} else {
+						outStream.writeObject(true);
+						outStream.writeObject(bob.toString());
+						changeGID(user, groupID,lastID);
 					}
 				}
-				int lastID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
-				String[] chat = getChat(groupID);
-				if (chat.length == 0) {
-					outStream.writeObject("Chat doesn't contain any message\n");
-				} 
-				StringBuilder bob = new StringBuilder();
-				for (int i = currID; i < lastID; i++) {
-					bob.append(chat[i] + "\n");	            	
-				}
-				if(bob.toString().equals("")){
-					outStream.writeObject("There are no new messages\n");
-				} else {
-					outStream.writeObject(bob.toString());
-					changeGID(user, groupID,lastID);
-				}
+				encrypt("Grupos.txt");
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+			} catch(Exception e) {
+				encrypt("Grupos.txt");
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				System.out.println("Error encryption or decryption method -> collect");
 			}
+			
 		}
 		/**
 		 * Changes the ID of the group in a user
@@ -333,7 +347,7 @@ public class SeiTchizServer {
 		 */
 
 		private void changeGID(String user, String groupID, int id) throws FileNotFoundException {
-			Scanner sc = new Scanner(new File(USERS + user + ".txt"));
+			Scanner sc = new Scanner(new File(USERS + user + "/" + user + ".txt"));
 			StringBuilder bob = new StringBuilder();
 			while(sc.hasNextLine()) {
 				String line = sc.nextLine();
@@ -348,13 +362,13 @@ public class SeiTchizServer {
 						} else { 
 							bob.append(grupo + ",");
 						}
-						bob.append("\n");
 					}
+					bob.append("\n");
 				} else {
 					bob.append(line + "\n");
 				}
 			}
-			PrintWriter pw = new PrintWriter(USERS + user + ".txt");
+			PrintWriter pw = new PrintWriter(USERS + user + "/" + user + ".txt");
 			pw.print(bob.toString());
 			pw.close();
 			sc.close();
@@ -397,7 +411,7 @@ public class SeiTchizServer {
 		 * @throws Exception 
 		 */
 
-		private void msg(String user, String groupID, String msg) throws Exception {
+		private void msg(String user, String groupID, byte[] msg, int identificador) throws Exception {
 			try {
 				decrypt("Grupos.txt");
 				decrypt(GRUPOS + groupID + ".txt");
@@ -408,7 +422,7 @@ public class SeiTchizServer {
 						int id = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
 						id++;
 						changeID(GRUPOS + groupID, id);
-						newMessage(groupID, "Chat", msg);
+						newMessage(groupID, "Chat", msg, identificador);
 						outStream.writeObject("Message received!\n");					
 					} else {
 						outStream.writeObject("You are not in that group!\n");
@@ -433,7 +447,7 @@ public class SeiTchizServer {
 		 * @throws FileNotFoundException
 		 */
 
-		private void newMessage(String groupID, String tag, String info) throws FileNotFoundException{
+		private void newMessage(String groupID, String tag, byte[] info, int id) throws FileNotFoundException{
 			Scanner sc = new Scanner(new File(GRUPOS + groupID + ".txt"));
 			StringBuilder bob = new StringBuilder();
 			while(sc.hasNextLine()) {
@@ -444,7 +458,7 @@ public class SeiTchizServer {
 					while(sc.hasNextLine()) {
 						bob.append(sc.nextLine() + "\n");
 					}
-					bob.append(info + System.lineSeparator());
+					bob.append(id + ":" + Base64.getEncoder().encodeToString(info) + System.lineSeparator());
 				} else {
 					bob.append(line + "\n");
 				}
