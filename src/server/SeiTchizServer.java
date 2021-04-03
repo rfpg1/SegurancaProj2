@@ -444,32 +444,38 @@ public class SeiTchizServer {
 		/**
 		 * Gets all the info about the groups of the user logged in
 		 * @param user user logged in
-		 * @throws FileNotFoundException
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void ginfo(String user) throws FileNotFoundException, IOException {
-			String grupos = getFromDoc(USERS + user, "Grupos");
-			String owner = getFromDoc(USERS + user, "Owner");
-			StringBuilder bob = new StringBuilder();
-			if(grupos == ""){
-				bob.append("You aren't a member of any group" + "\n");
-			}else {
-				bob.append("You are member of: ");
-				String[] g = grupos.split(",");
-				for(String gr : g){
-					bob.append(gr.split("/")[0] + ",");
+		private void ginfo(String user) throws Exception {
+			try {
+				decrypt(USERS + user + "/" + user + ".txt");
+				String grupos = getFromDoc(USERS + user + "/" + user, "Grupos");
+				String owner = getFromDoc(USERS + user + "/" + user, "Owner");
+				StringBuilder bob = new StringBuilder();
+				if(grupos == ""){
+					bob.append("You aren't a member of any group" + "\n");
+				}else {
+					bob.append("You are member of: ");
+					String[] g = grupos.split(",");
+					for(String gr : g){
+						bob.append(gr.split("/")[0] + ",");
+					}
+					bob.deleteCharAt(bob.length() - 1);
+					bob.append("\n");
 				}
-				bob.deleteCharAt(bob.length() - 1);
-				bob.append("\n");
-			}
 
-			if(owner == ""){
-				bob.append("You aren't the owner of any group" + "\n");
-			}else {
-				bob.append("You are the owner of: " + owner.substring(0, owner.length() -1) + "\n");
+				if(owner == ""){
+					bob.append("You aren't the owner of any group" + "\n");
+				}else {
+					bob.append("You are the owner of: " + owner.substring(0, owner.length() -1) + "\n");
+				}
+				outStream.writeObject(bob.toString());
+				encrypt(USERS + user + "/" + user + ".txt");
+			} catch (Exception e) {
+				encrypt(USERS + user + "/" + user + ".txt");
+				System.out.println("Error encryption or decryption method -> ginfo");
 			}
-			outStream.writeObject(bob.toString());
 		}
 
 		/**
@@ -478,29 +484,35 @@ public class SeiTchizServer {
 		 * if user isn't part of that group a message is sent
 		 * @param user
 		 * @param groupID
-		 * @throws FileNotFoundException
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void ginfo(String user, String groupID) throws FileNotFoundException, IOException{
-			File grupo = new File(GRUPOS + groupID + ".txt");
-			if(grupo.exists()){
-				String owner = getFromDoc(GRUPOS + groupID, "Owner");
-				List<String> m = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-				if(!user.equals(owner) && !m.contains(user)){
-					outStream.writeObject("You don't belong to this group\n");
-				} else {
-					String members = getFromDoc(GRUPOS + groupID, "Members");
-					if(members != ""){
-						outStream.writeObject("The owner of the group is: " + owner + "\n" +
-								"The members of the group are: " + members.substring(0, members.length() -1) + "\n");
-					} else{
-						outStream.writeObject("The owner of the group is: " + owner + "\n" +
-								"The group has no members \n");
+		private void ginfo(String user, String groupID) throws Exception{
+			try {
+				decrypt(GRUPOS + groupID + ".txt");
+				File grupo = new File(GRUPOS + groupID + ".txt");
+				if(grupo.exists()){
+					String owner = getFromDoc(GRUPOS + groupID, "Owner");
+					List<String> m = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
+					if(!user.equals(owner) && !m.contains(user)){
+						outStream.writeObject("You don't belong to this group\n");
+					} else {
+						String members = getFromDoc(GRUPOS + groupID, "Members");
+						if(members != ""){
+							outStream.writeObject("The owner of the group is: " + owner + "\n" +
+									"The members of the group are: " + members.substring(0, members.length() -1) + "\n");
+						} else{
+							outStream.writeObject("The owner of the group is: " + owner + "\n" +
+									"The group has no members \n");
+						}
 					}
+				}else {
+					outStream.writeObject("The group doesn't exist\n");
 				}
-			}else {
-				outStream.writeObject("The group doesn't exist\n");
+				encrypt(GRUPOS + groupID + ".txt");
+			} catch(Exception e) {
+				encrypt(GRUPOS + groupID + ".txt");
+				System.out.println("Error encryption or decryption method -> ginfo");
 			}
 		}
 
@@ -512,30 +524,75 @@ public class SeiTchizServer {
 		 * @param owner owner of the group
 		 * @param userID user to be removed from the group
 		 * @param groupID group to be removed from
-		 * @throws IOException
+		 * @throws Exception 
 		 */
 
-		private void removeMember(String owner, String userID, String groupID) throws  IOException {
-			List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
-			if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
-				List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-				if(members.contains(userID)) {
-					String[] gru = getFromDoc(USERS + userID, "Grupos").split(",");
-					int currID = 0;
-					for (String i : gru) {
-						String[] g = i.split("/");
-						if (g[0].equals(groupID)) {
-							currID = Integer.parseInt(g[1]);
+		private void removeMember(String owner, String userID, String groupID) throws  Exception {
+			try {
+				//NOVO
+				decrypt("Grupos.txt");
+				decrypt(GRUPOS + groupID + ".txt");
+				decrypt(USERS + userID + "/" + userID + ".txt");
+				//
+				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
+				if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
+					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
+					if(members.contains(userID)) {
+						String[] gru = getFromDoc(USERS + userID + "/" + userID, "Grupos").split(",");
+						int currID = 0;
+						for (String i : gru) {
+							String[] g = i.split("/");
+							if (g[0].equals(groupID)) {
+								currID = Integer.parseInt(g[1]);
+							}
 						}
+						removeFromDoc(GRUPOS + groupID, "Members", userID);
+						removeFromDoc(USERS + userID + "/" + userID, "Grupos", groupID + "/" + currID);
+						//NOVO
+						String i = getFromDoc(GRUPOS + groupID, "Identificador");
+						int id = Integer.parseInt(i.substring(0, i.length() - 1));
+						removeFromDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						id++;
+						addToDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
+						HashMap<String, String> m = new HashMap<>();
+						for (String member : members) {
+							if(!member.isEmpty()) {
+								m.put(member, users.get(member));
+							}
+						}
+						m.put(owner, users.get(owner));
+						outStream.writeObject(m);
+						for (String member : m.keySet()) {
+							byte[] encodedKey = (byte[]) inStream.readObject();
+							File f = new File(GRUPOS + "/" + groupID + "/" + member + ".txt");
+							FileInputStream fis = new FileInputStream(f);
+							byte[] temp = new byte[(int)f.length()];
+							fis.read(temp);
+							fis.close();
+							FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
+							fos.write(new String(temp));
+							String w = String.valueOf(id) + ":" + new String(encodedKey);
+							fos.write(w);
+							fos.close();
+						}
+						outStream.writeObject("Member removed\n");
+					} else {
+						outStream.writeObject(null);
+						outStream.writeObject("Member isn't in the group\n");
 					}
-					removeFromDoc(GRUPOS + groupID, "Members", userID);
-					removeFromDoc(USERS + userID, "Grupos", groupID + "/" + currID);
-					outStream.writeObject("Member removed\n");
 				} else {
-					outStream.writeObject("Member isn't in the group\n");
+					outStream.writeObject(null);
+					outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to remove yourself\\n");
 				}
-			} else {
-				outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to remove yourself\\n");
+				encrypt(USERS + userID + "/" + userID + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				encrypt("Grupos.txt");
+			} catch (Exception e ) {
+				encrypt(USERS + userID + "/" + userID + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
+				encrypt("Grupos.txt");
+				System.out.println("Error encryption or decryption method -> removeMember");
 			}
 		}
 

@@ -216,6 +216,7 @@ public class SeiTchiz {
 		case "removeu":
 			if(t.length == 3) {
 				outStream.writeObject(line);
+				removeMember(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -268,6 +269,33 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static void removeMember(String keyStore, String keyStorePassword) {
+		try {
+			//Criar a chave
+			KeyGenerator kg = KeyGenerator.getInstance("AES");
+			kg.init(128);
+			SecretKey key = kg.generateKey();
+			
+			@SuppressWarnings("unchecked")
+			HashMap<String, String> users = (HashMap<String, String>) inStream.readObject();
+			if(users != null) {
+				for (String member : users.keySet()) {
+					CertificateFactory fact = CertificateFactory.getInstance("X.509");
+					FileInputStream is = new FileInputStream (CLIENT + users.get(member));
+					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
+					PublicKey publicKey = cert.getPublicKey();
+					
+					Cipher cRSA = Cipher.getInstance("RSA");
+					cRSA.init(Cipher.WRAP_MODE, publicKey);
+					byte[] encodedKey = cRSA.wrap(key);
+					outStream.writeObject(encodedKey);
+				}
+			}
+		} catch(Exception e) {
+			
+		}
+	}
+
 	private static void addNewUser(String keyStore, String keyStorePassword) {
 		try {
 			//Criar a chave
