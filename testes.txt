@@ -3,6 +3,7 @@
 /mnt/c/Users/Utilizador/Desktop/faculdade/pinkScreen.jpg
 
 C:\Users\Utilizador\Desktop\faculdade\blackScreen.jpg
+C:\Users\Utilizador\Desktop\faculdade\pinkScreen.jpg
 C:\Users\Utilizador\Desktop\dawa.png
 
 Classes necessárias:

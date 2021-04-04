@@ -8,67 +8,99 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.security.Key;
+import java.security.KeyStore;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.Scanner;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 public class SeiTchiz {
 
 	private static final int MEGABYTE = 1024;
 	private static ObjectOutputStream outStream;
 	private static ObjectInputStream inStream;
+	
+	private static final String CLIENT = "client/";
 
-	public static void main(String[] args) {
-		Socket socket = null;
+	public static void main(String[] args) throws Exception {
 		String[] AdressEporta = args[0].split(":");
+		String trustStore =  CLIENT + args[1];
+		String keyStore = CLIENT + args[2];
+		String keyStorePassword = args[3];
+		String id = args[4]; // ID of the user
+		System.setProperty("javax.net.ssl.trustStore", trustStore);
+		System.setProperty("javax.net.ssl.keyStore", keyStore);
+		System.setProperty("javax.net.ssl.keyStorePassword", keyStorePassword);
 		Scanner sc = new Scanner(System.in);
-		String id = args[1]; // ID of the user
 		System.out.println("User ID: " + id);
+		String adress = AdressEporta[0];
+		int porta = Integer.parseInt(AdressEporta[1]);
+		SocketFactory sf = SSLSocketFactory.getDefault();
 		try {
-			String adress = AdressEporta[0];
-			int porta = Integer.parseInt(AdressEporta[1]);
-			socket = new Socket(adress, porta);
-			String pw = null; // Password of the user
-			if (args.length == 2)  {
-				System.out.println("Insira a sua password: ");
-				pw = sc.nextLine();
-			} else {
-				pw = args[2];
-			}
+			SSLSocket socket = (SSLSocket) sf.createSocket(adress, porta);
 			outStream = new ObjectOutputStream(socket.getOutputStream());
 			outStream.writeObject(id);
-			outStream.writeObject(pw);
+			
 			inStream = new ObjectInputStream(socket.getInputStream());
-			int autenticado = (int) inStream.readObject();
-			switch (autenticado) {
-			case 1: //User atenticado e deu certo
-				System.out.println("Correct Password!");
-				break;
-			case 2: //User existe mas a pw não é essa
-				System.out.println("Wrong Password!");
-				sc.close();
-				socket.close();
-				return;
-				//break;
-			case 3: //User não existe
-				System.out.println((String)inStream.readObject());
-				String nome = sc.nextLine();
-				outStream.writeObject(nome);
-				System.out.println("User registered\n");
-				break;
+			long nonce = (long) inStream.readObject();
+			boolean registered = (boolean) inStream.readObject();
+			Signature signature = Signature.getInstance("MD5withRSA");
+			signature.initSign(getPrivateKey(keyStore, keyStorePassword));
+			ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+		    buffer.putLong(nonce);
+		    signature.update(buffer.array());
+			if(registered) {
+				outStream.writeObject(signature.sign());
+				boolean b = (boolean) inStream.readObject();
+				if(b) {
+					System.out.println("Authentication was successful");
+				} else {
+					System.out.println("Authentication  was not successful");
+					return;
+				}
+			} else {
+				outStream.writeObject(nonce);
+				outStream.writeObject(signature.sign());
+				Certificate cert = getCertificate(keyStore, keyStorePassword);
+				outStream.writeObject(cert);
+				boolean b = (boolean) inStream.readObject();
+				if(b) {
+					System.out.println("Regist was successful");
+				} else {
+					System.out.println("Regist was not successful");
+					return;
+				}
 			}
 			String line = null;
 			do {
 				printOptions(); //Prints all the options the user can do
 				line = sc.nextLine(); 
-				pedido(line); // Process the request
+				pedido(line, id, keyStore, keyStorePassword); // Process the request
 			} while(!line.equals("quit"));
 
 			socket.close();
 			sc.close();
 
 		} catch(FileNotFoundException e) {
-			System.out.println("Ficheiro não existe");
+			System.out.println("Ficheiro nao existe");
 		} catch (UnknownHostException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -78,14 +110,33 @@ public class SeiTchiz {
 		}
 	}
 	
+	private static PrivateKey getPrivateKey(String key, String pw) throws Exception {
+		FileInputStream ins = new FileInputStream(key);
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS"); //TODO TALVEZ METER EM FINAL
+		keyStore.load(ins, pw.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		
+		return (PrivateKey) keyStore.getKey(alias, pw.toCharArray());
+	}
+	
+	private static Certificate getCertificate(String key, String pw) throws Exception {
+		FileInputStream ins = new FileInputStream(key);
+
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, pw.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		Certificate cert = keyStore.getCertificate(alias);
+		return cert;
+	}
+
 	/**
 	 * Processes the request of the user
 	 * @param line String with the method in the first position after a split by spaces
-	 * @throws IOException 
-	 * @throws ClassNotFoundException
+	 * @throws Exception 
 	 */
 	
-	private static void pedido(String line) throws IOException, ClassNotFoundException {
+	private static void pedido(String line, String user, String keyStore, String keyStorePassword) throws Exception {
 		String[] t = line.split("\\s+");
 		//Switch with every request possible
 		switch(t[0]) {
@@ -147,6 +198,7 @@ public class SeiTchiz {
 		case "newgroup":
 			if(t.length == 2) {
 				outStream.writeObject(line);
+				newGroup(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -156,6 +208,7 @@ public class SeiTchiz {
 		case "addu":
 			if(t.length == 3) {
 				outStream.writeObject(line);
+				newSecretKey(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -165,6 +218,7 @@ public class SeiTchiz {
 		case "removeu":
 			if(t.length == 3) {
 				outStream.writeObject(line);
+				newSecretKey(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -182,7 +236,11 @@ public class SeiTchiz {
 		case "m":
 		case "msg":
 			if(t.length >= 3) {
-				outStream.writeObject(line);
+				byte[] msgEncoded = msg(line, user, keyStore, keyStorePassword);
+				int id = getID(t[1], user);
+				outStream.writeObject(t[0] + " " + t[1]);
+				outStream.writeObject(msgEncoded);
+				outStream.writeObject(id);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -192,7 +250,8 @@ public class SeiTchiz {
 		case "collect":
 			if(t.length == 2) {
 				outStream.writeObject(line);
-				System.out.println((String) inStream.readObject());
+				if(!getMessages(t[1], user, keyStore, keyStorePassword))
+					System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
 			}
@@ -201,7 +260,8 @@ public class SeiTchiz {
 		case "history":
 			if(t.length == 2) {
 				outStream.writeObject(line);
-				System.out.println((String) inStream.readObject());
+				if(!getMessages(t[1], user, keyStore, keyStorePassword))
+					System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
 			}
@@ -216,7 +276,151 @@ public class SeiTchiz {
 			break;
 		}
 	}
-	
+		
+	private static boolean getMessages(String groupID, String user, String keyStoreFile, String keyStorePassword) {
+		try {
+			boolean b = (boolean) inStream.readObject();
+			if(b) {
+				String[] message = ((String) inStream.readObject()).split("\n");
+				StringBuilder bob = new StringBuilder();
+				bob.append("Messages:\n");
+				for (String m : message) {
+					bob.append(decryptMessage(m, groupID, user, keyStoreFile, keyStorePassword));
+					bob.append("\n");
+				}
+				System.out.println(bob.toString());
+			}
+			return b;
+		} catch(Exception e) {
+			
+			return false;
+		}
+	}
+
+	private static String decryptMessage(String m, String groupID, String user, String keyStoreFile, String keyStorePassword) throws FileNotFoundException {
+		try {
+			byte[] messageEncoded = (byte[]) inStream.readObject();
+			String line = (String) inStream.readObject();
+			byte[] key = Base64.getDecoder().decode(line);
+			
+			FileInputStream ins = new FileInputStream(keyStoreFile);
+			KeyStore keyStore = KeyStore.getInstance("JCEKS");
+			keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
+			String alias = keyStore.aliases().asIterator().next();
+			PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+			
+			Cipher cRSA = Cipher.getInstance("RSA");
+			cRSA.init(Cipher.UNWRAP_MODE, privateKey);
+			
+			Key keyEncoded = cRSA.unwrap(key, "RSA", Cipher.SECRET_KEY);
+			SecretKeySpec keySpec = new SecretKeySpec(keyEncoded.getEncoded(), "AES");
+			Cipher cAES = Cipher.getInstance("AES");
+			cAES.init(Cipher.DECRYPT_MODE, keySpec);
+			
+			byte[] msg = cAES.doFinal(messageEncoded);
+			String s = new String(msg);
+			return s;
+		} catch (Exception e) {
+			
+		}		
+		return null;
+	}
+
+	private static int getID(String groupID, String user) throws FileNotFoundException {
+		File f = new File("Grupos/" + groupID + "/" + user + ".txt");
+		String lastLine = "";
+		Scanner sc = new Scanner(f);
+		while(sc.hasNextLine()) {
+			lastLine = sc.nextLine();
+		}
+		sc.close();
+		int id = Integer.parseInt(Character.toString(lastLine.charAt(0)));
+		return id;
+	}
+
+	private static byte[] msg(String l, String user, String keyStoreFile, String keyStorePassword) throws Exception {
+		String[] line = l.split("\\s+");
+		StringBuilder bob = new StringBuilder();
+		for (int i = 2; i < line.length; i++) {
+			bob.append(line[i] + " ");
+		}
+		File f = new File("Grupos/" + line[1] + "/" + user + ".txt");
+		String lastLine = "";
+		Scanner sc = new Scanner(f);
+		while(sc.hasNextLine()) {
+			lastLine = sc.nextLine();
+		}
+		sc.close();
+
+		lastLine = lastLine.substring(2, lastLine.length());
+		
+		FileInputStream ins = new FileInputStream(keyStoreFile);
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
+		String alias = keyStore.aliases().asIterator().next();
+		PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+		
+		Cipher cRSA = Cipher.getInstance("RSA");
+		cRSA.init(Cipher.UNWRAP_MODE, privateKey);
+		byte[] key = Base64.getDecoder().decode(lastLine);
+		Key keyEncoded = cRSA.unwrap(key, "RSA", Cipher.SECRET_KEY);
+		
+		SecretKeySpec keySpec = new SecretKeySpec(keyEncoded.getEncoded(), "AES");
+		Cipher cAES = Cipher.getInstance("AES");
+		cAES.init(Cipher.ENCRYPT_MODE, keySpec);
+		byte[] msgEncoded = cAES.doFinal(bob.toString().getBytes());
+		
+		return msgEncoded;
+	}
+
+	private static void newSecretKey(String keyStore, String keyStorePassword) {
+		try {
+			//Criar a chave
+			KeyGenerator kg = KeyGenerator.getInstance("AES");
+			kg.init(128);
+			SecretKey key = kg.generateKey();
+			
+			@SuppressWarnings("unchecked")
+			HashMap<String, String> users = (HashMap<String, String>) inStream.readObject();
+			if(users != null) {
+				for (String member : users.keySet()) {
+					CertificateFactory fact = CertificateFactory.getInstance("X.509");
+					FileInputStream is = new FileInputStream (CLIENT + users.get(member));
+					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
+					PublicKey publicKey = cert.getPublicKey();
+					
+					Cipher cRSA = Cipher.getInstance("RSA");
+					cRSA.init(Cipher.WRAP_MODE, publicKey);
+					byte[] encodedKey = cRSA.wrap(key);
+					outStream.writeObject(encodedKey);
+				}
+			}
+		} catch (Exception e) {
+			
+		}
+	}
+
+	private static void newGroup(String keyStore, String keyStorePassword) {
+		try {
+			//Criar a chave
+			KeyGenerator kg = KeyGenerator.getInstance("AES");
+			kg.init(128);
+			SecretKey key = kg.generateKey();
+			
+			Cipher cRSA = Cipher.getInstance("RSA");
+			PublicKey publicKey = getCertificate(keyStore, keyStorePassword).getPublicKey();
+			cRSA.init(Cipher.WRAP_MODE, publicKey);
+			byte[] encodedKey = cRSA.wrap(key);
+			outStream.writeObject(encodedKey);
+		} catch (NoSuchAlgorithmException e) {
+			
+		} catch (NoSuchPaddingException e) {
+			
+		} catch (Exception e) {
+			
+		}
+	}
+
 	/**
 	 * Sends a photo through the socket to a server
 	 * @param line line with the path to the photo
@@ -281,7 +485,7 @@ public class SeiTchiz {
 		while(bb){
 			bb = (boolean) inStream.readObject();
 			if(bb){
-				bob.append("Fotos: \n");
+				bob.append("Foto: ");
 				String name = (String) inStream.readObject();
 				int filesize = (int) inStream.readObject();
 				OutputStream os = new FileOutputStream("Fotos/" + name);

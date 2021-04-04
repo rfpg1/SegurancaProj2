@@ -1,4 +1,4 @@
-/* AUTOMATICALLY GENERATED ON Fri Mar 05 17:12:37 GMT 2021*/
+/* AUTOMATICALLY GENERATED ON Sun Mar 28 15:32:01 BST 2021*/
 /* DO NOT EDIT */
 
 grant codeBase "File:SeiTchizServer.jar" {
@@ -11,4 +11,8 @@ grant codeBase "File:bin/" {
   permission java.net.SocketPermission "*:1024-", "accept, listen";
 };
 
+grant codeBase "File:bin/" {
+  permission java.util.PropertyPermission "javax.net.ssl.keyStore", "write";
+  permission java.util.PropertyPermission "javax.net.ssl.keyStorePassword", "write";
+};
 
