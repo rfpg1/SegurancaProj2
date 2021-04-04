@@ -1,5 +1,4 @@
 package server;
-//TODO ID do grupo passar a chamar LastMessage;
 //TODO testar o collect de mensagens que não é suposto ter acesso e o mesmo para o history
 import java.io.File;
 import java.io.FileInputStream;
@@ -288,11 +287,9 @@ public class SeiTchizServer {
 				encrypt("Grupos.txt");
 				encrypt(USERS + user + "/" + user + ".txt");
 				encrypt(GRUPOS + groupID + ".txt");
-
 			}
-
 		}
-		
+
 		private void getMessage(String groupID, String user, StringBuilder bob) throws IOException {
 			for (String m : bob.toString().split("\n")) {
 				String id = Character.toString(m.charAt(0));
@@ -345,7 +342,7 @@ public class SeiTchizServer {
 							currID = Integer.parseInt(g[1]); 
 						}
 					}
-					int lastID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+					int lastID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "LastMessage"));
 					String[] chat = getChat(groupID);
 					if (chat.length == 0) {
 						outStream.writeObject(false);
@@ -421,7 +418,7 @@ public class SeiTchizServer {
 
 		private String[] getChat(String groupID) throws FileNotFoundException {
 			Scanner sc = new Scanner(new File(GRUPOS + groupID + ".txt"));
-			int ID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+			int ID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "LastMessage"));
 			boolean b = false;
 			String[] msgs = new String[ID];
 			int i = 0;
@@ -457,7 +454,7 @@ public class SeiTchizServer {
 				if(grupos.contains(groupID)) {
 					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
 					if(members.contains(user) || getFromDoc(GRUPOS + groupID, "Owner").equals(user)) {
-						int id = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+						int id = Integer.parseInt(getFromDoc(GRUPOS + groupID, "LastMessage"));
 						id++;
 						changeID(GRUPOS + groupID, id);
 						newMessage(groupID, "Chat", msg, identificador);
@@ -599,9 +596,9 @@ public class SeiTchizServer {
 				decrypt(GRUPOS + groupID + ".txt");
 				decrypt(USERS + userID + "/" + userID + ".txt");
 				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
-				if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
+				if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {	
 					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-					if(members.contains(userID)) {
+					if(members.contains(userID) && users.containsKey(userID)) {
 						String[] gru = getFromDoc(USERS + userID + "/" + userID, "Grupos").split(",");
 						int currID = 0;
 						for (String i : gru) {
@@ -613,11 +610,11 @@ public class SeiTchizServer {
 						removeFromDoc(GRUPOS + groupID, "Members", userID);
 						removeFromDoc(USERS + userID + "/" + userID, "Grupos", groupID + "/" + currID);
 						//NOVO
-						String i = getFromDoc(GRUPOS + groupID, "Identificador");
+						String i = getFromDoc(GRUPOS + groupID, "ID");
 						int id = Integer.parseInt(i.substring(0, i.length() - 1));
-						removeFromDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						removeFromDoc(GRUPOS + groupID, "ID", String.valueOf(id));
 						id++;
-						addToDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						addToDoc(GRUPOS + groupID, "ID", String.valueOf(id));
 						members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
 						HashMap<String, String> m = new HashMap<>();
 						for (String member : members) {
@@ -635,7 +632,7 @@ public class SeiTchizServer {
 							fis.read(temp);
 							fis.close();
 							FileWriter fos = new FileWriter(GRUPOS + "/" + groupID + "/" + member + ".txt");
-							fos.write(new String(temp));
+							fos.write(new String(temp) + "\n");
 							String w = String.valueOf(id) + ":" + Base64.getEncoder().encodeToString(encodedKey);
 							fos.write(w);
 							fos.close();
@@ -643,11 +640,11 @@ public class SeiTchizServer {
 						outStream.writeObject("Member removed\n");
 					} else {
 						outStream.writeObject(null);
-						outStream.writeObject("Member isn't in the group\n");
+						outStream.writeObject("Member isn't in the group or member does not exist\n");
 					}
 				} else {
 					outStream.writeObject(null);
-					outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to remove yourself\\n");
+					outStream.writeObject("This isn't the owner of the group or group does not exist or you are trying to remove yourself\n");
 				}
 				encrypt(USERS + userID + "/" + userID + ".txt");
 				encrypt(GRUPOS + groupID + ".txt");
@@ -659,7 +656,7 @@ public class SeiTchizServer {
 				System.out.println("Error encryption or decryption method -> removeMember");
 			}
 		}
-		
+
 		/**
 		 * Adds a member from a group
 		 * if group doesn't exist a message is sent
@@ -679,16 +676,16 @@ public class SeiTchizServer {
 				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
 				if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
 					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
-					if(!members.contains(userID)) {
-						int gID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
+					if(!members.contains(userID) && users.containsKey(userID)) {
+						int gID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "LastMessage"));
 						addToDoc(GRUPOS + groupID, "Members", userID);
 						addToDoc(USERS + userID + "/" + userID, "Grupos", groupID + "/" +  gID + "/" + gID);
-						
-						String i = getFromDoc(GRUPOS + groupID, "Identificador");
+
+						String i = getFromDoc(GRUPOS + groupID, "ID");
 						int id = Integer.parseInt(i.substring(0, i.length() - 1));
-						removeFromDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						removeFromDoc(GRUPOS + groupID, "ID", String.valueOf(id));
 						id++;
-						addToDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
+						addToDoc(GRUPOS + groupID, "ID", String.valueOf(id));
 						members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
 						HashMap<String, String> m = new HashMap<>();
 						for (String member : members) {
@@ -721,7 +718,7 @@ public class SeiTchizServer {
 						outStream.writeObject("Member added\n");
 					} else {
 						outStream.writeObject(null);
-						outStream.writeObject("Member is already in group\n");
+						outStream.writeObject("Member is already in group member does not exist\n");
 					}
 				} else {
 					outStream.writeObject(null);
@@ -730,6 +727,7 @@ public class SeiTchizServer {
 				encrypt(USERS + userID + "/" + userID + ".txt");
 				encrypt(GRUPOS + groupID + ".txt");
 				encrypt("Grupos.txt");
+
 			} catch (Exception e) {
 				encrypt("Grupos.txt");
 				encrypt(USERS + userID + "/" + userID + ".txt");
@@ -758,8 +756,8 @@ public class SeiTchizServer {
 					PrintWriter pw = new PrintWriter(GRUPOS + groupID + ".txt");
 					pw.println("Owner:" + user);
 					pw.println("Members:");
-					pw.println("ID:0");
-					pw.println("Identificador:0,");
+					pw.println("LastMessage:0");
+					pw.println("ID:0,");
 					pw.print("Chat:\n");
 					pw.close();
 					outStream.writeObject("Group created\n");
@@ -977,8 +975,8 @@ public class SeiTchizServer {
 			while(sc.hasNextLine()) {
 				String line = sc.nextLine();
 				String[] sp = line.split(":");
-				if(sp[0].equals("ID")) {
-					bob.append("ID:" + id + "\n");
+				if(sp[0].equals("LastMessage")) {
+					bob.append("LastMessage:" + id + "\n");
 				} else {
 					bob.append(line + "\n");
 				}
@@ -1233,20 +1231,22 @@ public class SeiTchizServer {
 		cRSA.init(Cipher.ENCRYPT_MODE, privateKey);
 
 		File f = new File(file);
-		FileInputStream rawDataFromFile = new FileInputStream(f);
-		byte[] plainText = new byte[(int)f.length()];
-		rawDataFromFile.read(plainText);
-		rawDataFromFile.close();
-		byte[] encodedKey = cRSA.doFinal(plainText);
-		FileOutputStream fos = new FileOutputStream(f);
-		fos.write(encodedKey);
-		fos.close();
+		if(f.exists()) {
+			FileInputStream rawDataFromFile = new FileInputStream(f);
+			byte[] plainText = new byte[(int)f.length()];
+			rawDataFromFile.read(plainText);
+			rawDataFromFile.close();
+			byte[] encodedKey = cRSA.doFinal(plainText);
+			FileOutputStream fos = new FileOutputStream(f);
+			fos.write(encodedKey);
+			fos.close();
+		}
 	}
 
 	private void decrypt(String file) throws Exception {
 		PublicKey publicKey = getPublicKey("server/" + this.keyStore, this.keyStorePassword);
 		File f = new File(file);
-		if(f.length() > 0) {
+		if(f.exists() && f.length() > 0) {
 			Cipher cRSA = Cipher.getInstance("RSA");
 			cRSA.init(Cipher.DECRYPT_MODE, publicKey);
 			FileInputStream rawDataFromKey = new FileInputStream(f);

@@ -1,4 +1,4 @@
-/* AUTOMATICALLY GENERATED ON Sun Mar 28 15:32:43 BST 2021*/
+/* AUTOMATICALLY GENERATED ON Sun Apr 04 17:48:05 BST 2021*/
 /* DO NOT EDIT */
 
 grant codeBase "File:SeiTchiz.jar" {
@@ -14,5 +14,7 @@ grant codeBase "File:bin/" {
 grant codeBase "File:bin/" {
   permission java.util.PropertyPermission "javax.net.ssl.trustStore", "write";
   permission java.util.PropertyPermission "javax.net.ssl.trustStorePassword", "write";
+  permission java.util.PropertyPermission "javax.net.ssl.keyStore", "write, read";
+  permission java.util.PropertyPermission "javax.net.ssl.keyStorePassword", "read, write";
 };
 
