@@ -208,7 +208,7 @@ public class SeiTchiz {
 		case "addu":
 			if(t.length == 3) {
 				outStream.writeObject(line);
-				addNewUser(keyStore, keyStorePassword);
+				newSecretKey(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -218,7 +218,7 @@ public class SeiTchiz {
 		case "removeu":
 			if(t.length == 3) {
 				outStream.writeObject(line);
-				removeMember(keyStore, keyStorePassword);
+				newSecretKey(keyStore, keyStorePassword);
 				System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -237,7 +237,7 @@ public class SeiTchiz {
 		case "msg":
 			if(t.length >= 3) {
 				byte[] msgEncoded = msg(line, user, keyStore, keyStorePassword);
-				int id = getID(line, user);
+				int id = getID(t[1], user);
 				outStream.writeObject(t[0] + " " + t[1]);
 				outStream.writeObject(msgEncoded);
 				outStream.writeObject(id);
@@ -250,7 +250,7 @@ public class SeiTchiz {
 		case "collect":
 			if(t.length == 2) {
 				outStream.writeObject(line);
-				if(!collect(t[1], user, keyStore, keyStorePassword))
+				if(!getMessages(t[1], user, keyStore, keyStorePassword))
 					System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -260,7 +260,7 @@ public class SeiTchiz {
 		case "history":
 			if(t.length == 2) {
 				outStream.writeObject(line);
-				if(!history(t[1], user, keyStore, keyStorePassword))
+				if(!getMessages(t[1], user, keyStore, keyStorePassword))
 					System.out.println((String) inStream.readObject());
 			} else {
 				System.out.println("Executou mal o metodo");
@@ -276,27 +276,8 @@ public class SeiTchiz {
 			break;
 		}
 	}
-	
-	private static boolean history(String groupID, String user, String keyStore, String keyStorePassword) {
-		try {
-			boolean b = (boolean) inStream.readObject();
-			if(b) {
-				String[] message = ((String) inStream.readObject()).split("\n");
-				StringBuilder bob = new StringBuilder();
-				for (String m : message) {
-					bob.append(decryptMessage(m, groupID, user, keyStore, keyStorePassword));
-					bob.append("\n");
-				}
-				System.out.println(bob.toString());
-			}
-			return b;
-		} catch(Exception e) {
-			return false;
-		}
 		
-	}
-
-	private static boolean collect(String groupID, String user, String keyStoreFile, String keyStorePassword) {
+	private static boolean getMessages(String groupID, String user, String keyStoreFile, String keyStorePassword) {
 		try {
 			boolean b = (boolean) inStream.readObject();
 			if(b) {
@@ -318,20 +299,8 @@ public class SeiTchiz {
 
 	private static String decryptMessage(String m, String groupID, String user, String keyStoreFile, String keyStorePassword) throws FileNotFoundException {
 		try {
-			String id = Character.toString(m.charAt(0));
-			m = m.substring(2, m.length());
-			byte[] messageEncoded = Base64.getDecoder().decode(m);
-			File f = new File("Grupos/" + groupID + "/" + user + ".txt");
-			Scanner sc = new Scanner(f);
-			String line = "";
-			while(sc.hasNextLine()) {
-				line = sc.nextLine();
-				if(line.startsWith(id)) {
-					line = line.substring(2, line.length());
-					break;
-				}
-			}
-			sc.close();
+			byte[] messageEncoded = (byte[]) inStream.readObject();
+			String line = (String) inStream.readObject();
 			byte[] key = Base64.getDecoder().decode(line);
 			
 			FileInputStream ins = new FileInputStream(keyStoreFile);
@@ -357,13 +326,8 @@ public class SeiTchiz {
 		return null;
 	}
 
-	private static int getID(String l, String user) throws FileNotFoundException {
-		String[] line = l.split("\\s+");
-		StringBuilder bob = new StringBuilder();
-		for (int i = 2; i < line.length; i++) {
-			bob.append(line[i] + " ");
-		}
-		File f = new File("Grupos/" + line[1] + "/" + user + ".txt");
+	private static int getID(String groupID, String user) throws FileNotFoundException {
+		File f = new File("Grupos/" + groupID + "/" + user + ".txt");
 		String lastLine = "";
 		Scanner sc = new Scanner(f);
 		while(sc.hasNextLine()) {
@@ -409,34 +373,7 @@ public class SeiTchiz {
 		return msgEncoded;
 	}
 
-	private static void removeMember(String keyStore, String keyStorePassword) {
-		try {
-			//Criar a chave
-			KeyGenerator kg = KeyGenerator.getInstance("AES");
-			kg.init(128);
-			SecretKey key = kg.generateKey();
-			
-			@SuppressWarnings("unchecked")
-			HashMap<String, String> users = (HashMap<String, String>) inStream.readObject();
-			if(users != null) {
-				for (String member : users.keySet()) {
-					CertificateFactory fact = CertificateFactory.getInstance("X.509");
-					FileInputStream is = new FileInputStream (CLIENT + users.get(member));
-					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
-					PublicKey publicKey = cert.getPublicKey();
-					
-					Cipher cRSA = Cipher.getInstance("RSA");
-					cRSA.init(Cipher.WRAP_MODE, publicKey);
-					byte[] encodedKey = cRSA.wrap(key);
-					outStream.writeObject(encodedKey);
-				}
-			}
-		} catch(Exception e) {
-			
-		}
-	}
-
-	private static void addNewUser(String keyStore, String keyStorePassword) {
+	private static void newSecretKey(String keyStore, String keyStorePassword) {
 		try {
 			//Criar a chave
 			KeyGenerator kg = KeyGenerator.getInstance("AES");

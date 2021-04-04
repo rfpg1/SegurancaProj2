@@ -1,6 +1,6 @@
 package server;
 //TODO ID do grupo passar a chamar LastMessage;
-//TODO poder apagar os ficheiros à campeão
+//TODO testar o collect de mensagens que não é suposto ter acesso e o mesmo para o history
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -79,7 +79,6 @@ public class SeiTchizServer {
 				outStream.writeObject(l);
 				outStream.writeObject(registered);
 				if(registered) {
-					//byte[] nonceEncrypted =  (byte[]) inStream.readObject();
 					byte signature[] = (byte[]) inStream.readObject();
 					CertificateFactory fact = CertificateFactory.getInstance("X.509");
 					FileInputStream is = new FileInputStream (CERTIFICADOS + users.get(user));
@@ -272,6 +271,7 @@ public class SeiTchizServer {
 					} else {
 						outStream.writeObject(true);
 						outStream.writeObject(bob.toString());
+						getMessage(groupID, user, bob);
 					}
 					sc.close();
 				}
@@ -283,14 +283,35 @@ public class SeiTchizServer {
 				outStream.writeObject(false);
 				outStream.writeObject("Group does not exist\n");
 			} catch (IOException e) {
-				
+
 			} catch (Exception e) {
 				encrypt("Grupos.txt");
 				encrypt(USERS + user + "/" + user + ".txt");
 				encrypt(GRUPOS + groupID + ".txt");
-				
+
 			}
 
+		}
+		
+		private void getMessage(String groupID, String user, StringBuilder bob) throws IOException {
+			for (String m : bob.toString().split("\n")) {
+				String id = Character.toString(m.charAt(0));
+				m = m.substring(2, m.length());
+				File f = new File("Grupos/" + groupID + "/" + user + ".txt");
+				Scanner sc = new Scanner(f);
+				String line = "";
+				while(sc.hasNextLine()) {
+					line = sc.nextLine();
+					if(line.startsWith(id)) {
+						line = line.substring(2, line.length());
+						break;
+					}
+				}
+				sc.close();
+				byte[] messageEncoded = Base64.getDecoder().decode(m);
+				outStream.writeObject(messageEncoded);
+				outStream.writeObject(line);
+			}
 		}
 
 		/**
@@ -341,6 +362,7 @@ public class SeiTchizServer {
 						outStream.writeObject(true);
 						outStream.writeObject(bob.toString());
 						changeGID(user, groupID,lastID);
+						getMessage(groupID, user, bob);
 					}
 				}
 				encrypt("Grupos.txt");
@@ -352,7 +374,7 @@ public class SeiTchizServer {
 				encrypt(GRUPOS + groupID + ".txt");
 				System.out.println("Error encryption or decryption method -> collect");
 			}
-			
+
 		}
 		/**
 		 * Changes the ID of the group in a user
@@ -573,11 +595,9 @@ public class SeiTchizServer {
 
 		private void removeMember(String owner, String userID, String groupID) throws  Exception {
 			try {
-				//NOVO
 				decrypt("Grupos.txt");
 				decrypt(GRUPOS + groupID + ".txt");
 				decrypt(USERS + userID + "/" + userID + ".txt");
-				//
 				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
 				if(grupos.contains(groupID) && getFromDoc(GRUPOS + groupID, "Owner").equals(owner) && !owner.equals(userID)) {
 					List<String> members = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
@@ -639,7 +659,7 @@ public class SeiTchizServer {
 				System.out.println("Error encryption or decryption method -> removeMember");
 			}
 		}
-
+		
 		/**
 		 * Adds a member from a group
 		 * if group doesn't exist a message is sent
@@ -663,6 +683,7 @@ public class SeiTchizServer {
 						int gID = Integer.parseInt(getFromDoc(GRUPOS + groupID, "ID"));
 						addToDoc(GRUPOS + groupID, "Members", userID);
 						addToDoc(USERS + userID + "/" + userID, "Grupos", groupID + "/" +  gID + "/" + gID);
+						
 						String i = getFromDoc(GRUPOS + groupID, "Identificador");
 						int id = Integer.parseInt(i.substring(0, i.length() - 1));
 						removeFromDoc(GRUPOS + groupID, "Identificador", String.valueOf(id));
@@ -1265,8 +1286,8 @@ public class SeiTchizServer {
 		this.keyStore = keyStore;
 		this.keyStorePassword = keyStorePassword;
 		try {
-			loadUsers();
 			createFolder();
+			loadUsers();
 			ss = (SSLServerSocket) ssf.createServerSocket(port);
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -1282,25 +1303,28 @@ public class SeiTchizServer {
 		//sSoc.close();
 	}
 
-	private void createFolder() {
+	private void createFolder() throws Exception {
 		for(File pasta : pastas) {
 			if(!pasta.exists()) {
 				pasta.mkdir();
 			}
 		}
 		File f = new File("Grupos.txt");
-		if(f.length() <= 0) {
-			PrintWriter pw;
-			try {
-				pw = new PrintWriter("Grupos.txt");
-				pw.print("Grupos:");
-				pw.close();
-				encrypt("Grupos.txt");
-			} catch (FileNotFoundException e) {
-				System.out.println("Grupos nah existe");
-			} catch (Exception e) {
-				System.out.println("Error on encrypt -> createFolder");
-			}
+		File f1 = new File("Users.txt");
+		File f2 = new File("Fotos.txt");
+		if(!f. exists()) {
+			PrintWriter pw = new PrintWriter("Grupos.txt");
+			pw.print("Grupos:");
+			pw.close();
+			encrypt("Grupos.txt");
+		} 
+		if(!f1.exists()) {
+			PrintWriter pw = new PrintWriter("Users.txt");
+			pw.close();
+		} 
+		if(!f2.exists()) {
+			PrintWriter pw = new PrintWriter("Fotos.txt");
+			pw.close();
 		}
 	}
 
