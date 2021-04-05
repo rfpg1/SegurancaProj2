@@ -1388,7 +1388,6 @@ public class SeiTchizServer {
 			KeyGenerator kg = KeyGenerator.getInstance("AES");
 			kg.init(128);
 			SecretKey key = kg.generateKey();
-			System.out.println(key.hashCode());
 			pw.println(Base64.getEncoder().encodeToString(key.getEncoded()));
 			pw.close();
 		}
