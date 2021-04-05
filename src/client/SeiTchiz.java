@@ -467,16 +467,19 @@ public class SeiTchiz {
 	 */
 	 private static void newGroup(String keyStore, String keyStorePassword) {
 		try {
-			//Criar a chave
-			KeyGenerator kg = KeyGenerator.getInstance("AES");
-			kg.init(128);
-			SecretKey key = kg.generateKey();
+			boolean b = (boolean) inStream.readObject();
+			if(b) {
+				//Criar a chave
+				KeyGenerator kg = KeyGenerator.getInstance("AES");
+				kg.init(128);
+				SecretKey key = kg.generateKey();
 
-			Cipher cRSA = Cipher.getInstance("RSA");
-			PublicKey publicKey = getCertificate(keyStore, keyStorePassword).getPublicKey();
-			cRSA.init(Cipher.WRAP_MODE, publicKey);
-			byte[] encodedKey = cRSA.wrap(key);
-			outStream.writeObject(encodedKey);
+				Cipher cRSA = Cipher.getInstance("RSA");
+				PublicKey publicKey = getCertificate(keyStore, keyStorePassword).getPublicKey();
+				cRSA.init(Cipher.WRAP_MODE, publicKey);
+				byte[] encodedKey = cRSA.wrap(key);
+				outStream.writeObject(encodedKey);
+			}
 		} catch (NoSuchAlgorithmException e) {
 
 		} catch (NoSuchPaddingException e) {

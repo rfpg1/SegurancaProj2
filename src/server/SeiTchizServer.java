@@ -771,6 +771,7 @@ public class SeiTchizServer {
 				decrypt("Grupos.txt");
 				List<String> grupos = Arrays.asList(getFromDoc("Grupos", "Grupos").split(","));
 				if(!grupos.contains(groupID)) {
+					outStream.writeObject(true);
 					decrypt(USERS + user + "/" + user+ ".txt");
 					addToDoc("Grupos", "Grupos", groupID);
 					addToDoc(USERS + user + "/" + user, "Grupos", groupID + "/0/0");
@@ -795,6 +796,7 @@ public class SeiTchizServer {
 					encrypt(USERS + user + "/" + user+ ".txt");
 					encrypt(GRUPOS + groupID + ".txt");
 				} else {
+					outStream.writeObject(false);
 					outStream.writeObject("Group with that name already exists\n");
 				}
 				encrypt("Grupos.txt");
