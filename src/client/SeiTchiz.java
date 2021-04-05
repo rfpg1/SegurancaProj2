@@ -110,6 +110,14 @@ public class SeiTchiz {
 		}
 	}
 
+	/**
+	 * Gets private key from a keyStore
+	 * @param key keyStore
+	 * @param pw keyStorePassword
+	 * @return private key
+	 * @throws Exception
+	 */
+	
 	private static PrivateKey getPrivateKey(String key, String pw) throws Exception {
 		FileInputStream ins = new FileInputStream(key);
 
@@ -120,6 +128,14 @@ public class SeiTchiz {
 		return (PrivateKey) keyStore.getKey(alias, pw.toCharArray());
 	}
 
+	/**
+	 * Gets certificate from a keyStore
+	 * @param key keyStore
+	 * @param pw keyStorePassword
+	 * @return certificate
+	 * @throws Exception
+	 */
+	
 	private static Certificate getCertificate(String key, String pw) throws Exception {
 		FileInputStream ins = new FileInputStream(key);
 
@@ -277,6 +293,16 @@ public class SeiTchiz {
 		}
 	}
 
+	/**
+	 * Gets all the messages encoded from a group and decodes
+	 * @param groupID group where messages come from
+	 * @param user
+	 * @param keyStoreFile
+	 * @param keyStorePassword
+	 * @return messages decoded
+	 */
+	
+	@SuppressWarnings("unused")
 	private static boolean getMessages(String groupID, String user, String keyStoreFile, String keyStorePassword) {
 		try {
 			boolean b = (boolean) inStream.readObject();
@@ -285,7 +311,7 @@ public class SeiTchiz {
 				StringBuilder bob = new StringBuilder();
 				bob.append("Messages:\n");
 				for (String m : message) {
-					bob.append(decryptMessage(m, groupID, user, keyStoreFile, keyStorePassword));
+					bob.append(decryptMessage(groupID, user, keyStoreFile, keyStorePassword));
 					bob.append("\n");
 				}
 				System.out.println(bob.toString());
@@ -297,7 +323,17 @@ public class SeiTchiz {
 		}
 	}
 
-	private static String decryptMessage(String m, String groupID, String user, String keyStoreFile, String keyStorePassword) throws FileNotFoundException {
+	/**
+	 * Decrypt a group message
+	 * @param groupID group where the message came from
+	 * @param user 
+	 * @param keyStoreFile
+	 * @param keyStorePassword
+	 * @return message decoded
+	 * @throws FileNotFoundException
+	 */
+	
+	private static String decryptMessage(String groupID, String user, String keyStoreFile, String keyStorePassword) throws FileNotFoundException {
 		try {
 			byte[] messageEncoded = (byte[]) inStream.readObject();
 			String line = (String) inStream.readObject();
@@ -326,6 +362,14 @@ public class SeiTchiz {
 		return null;
 	}
 
+	/**
+	 * Gets the ID of the group
+	 * @param groupID group
+	 * @param user user
+	 * @return ID of the group
+	 * @throws FileNotFoundException
+	 */
+	
 	private static int getID(String groupID, String user) throws FileNotFoundException {
 		File f = new File("Grupos/" + groupID + "/" + user + ".txt");
 		String lastLine = "";
@@ -338,6 +382,16 @@ public class SeiTchiz {
 		return id;
 	}
 
+	/**
+	 * Encodes the message sent by the user
+	 * @param l line from console prompt, where l[1] = groupID
+	 * @param user 
+	 * @param keyStoreFile
+	 * @param keyStorePassword
+	 * @return message encoded
+	 * @throws Exception
+	 */
+	
 	private static byte[] msg(String l, String user, String keyStoreFile, String keyStorePassword) throws Exception {
 		String[] line = l.split("\\s+");
 		StringBuilder bob = new StringBuilder();
@@ -373,6 +427,12 @@ public class SeiTchiz {
 		return msgEncoded;
 	}
 
+	/**
+	 * Generates a new from a keyStore
+	 * @param keyStore
+	 * @param keyStorePassword
+	 */
+	
 	private static void newSecretKey(String keyStore, String keyStorePassword) {
 		try {
 			//Criar a chave
@@ -400,7 +460,12 @@ public class SeiTchiz {
 		}
 	}
 
-	private static void newGroup(String keyStore, String keyStorePassword) {
+	/**
+	 * Generates a new key the for the group
+	 * @param keyStore of the owner
+	 * @param keyStorePassword of the owner
+	 */
+	 private static void newGroup(String keyStore, String keyStorePassword) {
 		try {
 			//Criar a chave
 			KeyGenerator kg = KeyGenerator.getInstance("AES");

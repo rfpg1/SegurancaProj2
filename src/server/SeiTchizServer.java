@@ -13,6 +13,7 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.security.Key;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -211,6 +212,12 @@ public class SeiTchizServer {
 			} catch (Exception e) {
 			} 
 		}
+		
+		/**
+		 * Generates a nonce using SecureRandom
+		 * @return nonce
+		 * @throws ApplicationException
+		 */
 
 		private long generateNonce() throws ApplicationException {
 			try {
@@ -248,7 +255,7 @@ public class SeiTchizServer {
 				List<String> membersAux = Arrays.asList(getFromDoc(GRUPOS + groupID, "Members").split(","));
 				if (!gruposAux.contains(groupID)) { // Grupo n�o existe
 					outStream.writeObject(false);
-					outStream.writeObject(groupID + " does not exist");
+					outStream.writeObject(groupID + " does not exist\n");
 					// Caso o user n�o fa�a parte do grupo nem � o owner
 				} else if (!membersAux.contains(user) && !getFromDoc(GRUPOS + groupID, "Owner").equals(user)) {
 					outStream.writeObject(false);
@@ -285,10 +292,11 @@ public class SeiTchizServer {
 				encrypt(GRUPOS + groupID + ".txt");
 			} catch (FileNotFoundException e) {
 				System.out.println("Ficheiro n�o existe");
+				encrypt("Grupos.txt");
+				encrypt(USERS + user + "/" + user + ".txt");
+				encrypt(GRUPOS + groupID + ".txt");
 				outStream.writeObject(false);
 				outStream.writeObject("Group does not exist\n");
-			} catch (IOException e) {
-
 			} catch (Exception e) {
 				encrypt("Grupos.txt");
 				encrypt(USERS + user + "/" + user + ".txt");
@@ -296,6 +304,14 @@ public class SeiTchizServer {
 			}
 		}
 
+		/**
+		 * Gets an encoded message from a group 
+		 * @param groupID
+		 * @param user
+		 * @param bob
+		 * @throws IOException
+		 */
+		
 		private void getMessage(String groupID, String user, StringBuilder bob) throws IOException {
 			for (String m : bob.toString().split("\n")) {
 				String id = Character.toString(m.charAt(0));
@@ -911,6 +927,14 @@ public class SeiTchizServer {
 			}
 		}
 
+		/**
+		 * Checks if a photo integraty was maintained 
+		 * @param user
+		 * @param photo
+		 * @return
+		 * @throws Exception
+		 */
+		
 		private boolean isValid(String user, String photo) throws Exception {
 			File f1 = new File(FOTOS + user + ";" + photo + ".jpg");
 			byte[] foto = Files.readAllBytes(f1.toPath());
@@ -922,7 +946,6 @@ public class SeiTchizServer {
 					Mac mac = Mac.getInstance("HmacSHA1");
 					SecretKey key = getSecretKey();
 					mac.init(key);
-					System.out.println(l[2].length());
 					byte[] b1 = mac.doFinal(foto);
 					byte[] b2 = Base64.getDecoder().decode(l[2]);
 					sc.close();
@@ -941,18 +964,21 @@ public class SeiTchizServer {
 		 */
 
 		private String getFromDoc(String docName, String tag) throws FileNotFoundException {
-			Scanner sc = new Scanner(new File(docName + ".txt"));
-			while(sc.hasNextLine()){
-				String line = sc.nextLine();
-				String[] sp = line.split(":");
-				if(sp[0].equals(tag)) {
-					if(sp.length > 1){
-						sc.close();
-						return sp[1];
+			File f = new File(docName + ".txt");
+			if(f.exists()) {
+				Scanner sc = new Scanner(new File(docName + ".txt"));
+				while(sc.hasNextLine()){
+					String line = sc.nextLine();
+					String[] sp = line.split(":");
+					if(sp[0].equals(tag)) {
+						if(sp.length > 1){
+							sc.close();
+							return sp[1];
+						}
 					}
 				}
+				sc.close();
 			}
-			sc.close();
 			return "";
 		}
 
@@ -1043,20 +1069,6 @@ public class SeiTchizServer {
 			mac.init(key);
 			System.out.println(Base64.getEncoder().encodeToString(mac.doFinal(f)).length());
 			addToDoc(FOTOS + "synthesis", null, user + ":" + id + ":" +  Base64.getEncoder().encodeToString(mac.doFinal(f)));		
-		}
-
-		private SecretKey getSecretKey() throws Exception {
-			File f = new File(SERVER + "secretKey.txt");
-			Scanner sc = new Scanner(f);
-			String key = "";
-			while(sc.hasNextLine()) {
-				key = sc.nextLine();
-			}
-			byte[] keyEncoded = Base64.getDecoder().decode(key);
-			SecretKey ok = new SecretKeySpec(keyEncoded, 0, keyEncoded.length, "AES");			
-			System.out.println(ok.hashCode());
-			sc.close();
-			return ok;
 		}
 
 		/**
@@ -1276,41 +1288,62 @@ public class SeiTchizServer {
 		server.startServer(Integer.parseInt(args[0]), args[1], args[2]);
 	}
 
+	/**
+	 * Encrypts a file with the secret key of the server
+	 * @param file
+	 * @throws Exception
+	 */
+	
 	private void encrypt(String file) throws Exception {
-		PrivateKey privateKey = getPrivateKey("server/" + this.keyStore, this.keyStorePassword);
-		Cipher cRSA = Cipher.getInstance("RSA");
-		cRSA.init(Cipher.ENCRYPT_MODE, privateKey);
-
 		File f = new File(file);
 		if(f.exists()) {
+			SecretKey sKey = getSecretKey();
+			Cipher cAES = Cipher.getInstance("AES");
+			cAES.init(Cipher.ENCRYPT_MODE, sKey);
+			
 			FileInputStream rawDataFromFile = new FileInputStream(f);
 			byte[] plainText = new byte[(int)f.length()];
 			rawDataFromFile.read(plainText);
 			rawDataFromFile.close();
-			byte[] encodedKey = cRSA.doFinal(plainText);
+			byte[] encodedData = cAES.doFinal(plainText);
 			FileOutputStream fos = new FileOutputStream(f);
-			fos.write(encodedKey);
+			fos.write(encodedData);
 			fos.close();
 		}
 	}
 
-	private void decrypt(String file) throws Exception {
-		PublicKey publicKey = getPublicKey("server/" + this.keyStore, this.keyStorePassword);
+	/**
+	 * Decrypts a file with the secret key of the server
+	 * @param file
+	 * @throws Exception
+	 */
+	
+	private void decrypt(String file) throws Exception {	
 		File f = new File(file);
 		if(f.exists() && f.length() > 0) {
-			Cipher cRSA = Cipher.getInstance("RSA");
-			cRSA.init(Cipher.DECRYPT_MODE, publicKey);
-			FileInputStream rawDataFromKey = new FileInputStream(f);
-			byte[] keyText = new byte[(int)f.length()];
-			rawDataFromKey.read(keyText);
-			rawDataFromKey.close();
-			byte[] dataDecrypted = cRSA.doFinal(keyText);
-			FileOutputStream fos = new FileOutputStream(file);
-			fos.write(dataDecrypted);
+			SecretKey sKey = getSecretKey();
+			Cipher cAES = Cipher.getInstance("AES");
+			cAES.init(Cipher.DECRYPT_MODE, sKey);
+			
+			FileInputStream rawDataFromFile = new FileInputStream(f);
+			byte[] plainText = new byte[(int)f.length()];
+			rawDataFromFile.read(plainText);
+			rawDataFromFile.close();
+			byte[] encodedData = cAES.doFinal(plainText);
+			FileOutputStream fos = new FileOutputStream(f);
+			fos.write(encodedData);
 			fos.close();
 		}
 	}
 
+	/**
+	 * Gets the privateKey 
+	 * @param keyStoreFile keyStore
+	 * @param keyStorePassword keyStorePassword
+	 * @return privateKey
+	 * @throws Exception
+	 */
+	
 	private static PrivateKey getPrivateKey(String keyStoreFile, String keyStorePassword) throws Exception {
 		FileInputStream ins = new FileInputStream(keyStoreFile);
 
@@ -1320,6 +1353,14 @@ public class SeiTchizServer {
 		return (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
 	}
 
+	/**
+	 * Gets the publicKey
+	 * @param keyStoreFile keyStore
+	 * @param keyStorePassword KeyStorePassword
+	 * @return publicKey
+	 * @throws Exception
+	 */
+	
 	private PublicKey getPublicKey(String keyStoreFile, String keyStorePassword) throws Exception {
 		FileInputStream ins = new FileInputStream(keyStoreFile);
 
@@ -1328,6 +1369,29 @@ public class SeiTchizServer {
 		String alias = keyStore.aliases().asIterator().next();
 		Certificate cert = keyStore.getCertificate(alias);
 		return cert.getPublicKey();
+	}
+	
+	/**
+	 * Gets the secretKey
+	 * @return secretKey
+	 * @throws Exception
+	 */
+	
+	private SecretKey getSecretKey() throws Exception {
+		File f = new File(SERVER + "secretKey.txt");
+		Scanner sc = new Scanner(f);
+		String key = "";
+		while(sc.hasNextLine()) {
+			key = sc.nextLine();
+		}
+		PrivateKey privateKey = getPrivateKey("server/" + keyStore, keyStorePassword);
+		Cipher cRSA = Cipher.getInstance("RSA");
+		cRSA.init(Cipher.UNWRAP_MODE, privateKey);
+		byte[] keyEncoded = Base64.getDecoder().decode(key);
+		Key keyE = cRSA.unwrap(keyEncoded, "RSA", Cipher.SECRET_KEY);
+		SecretKey ok = new SecretKeySpec(keyE.getEncoded(), 0, keyE.getEncoded().length, "AES");
+		sc.close();
+		return ok;
 	}
 
 	@SuppressWarnings("resource")
@@ -1354,6 +1418,11 @@ public class SeiTchizServer {
 		//sSoc.close();
 	}
 
+	/**
+	 * Creates all folderes and files that are going to be needed
+	 * @throws Exception
+	 */
+	
 	private void createFolder() throws Exception {
 		for(File pasta : pastas) {
 			if(!pasta.exists()) {
@@ -1388,7 +1457,11 @@ public class SeiTchizServer {
 			KeyGenerator kg = KeyGenerator.getInstance("AES");
 			kg.init(128);
 			SecretKey key = kg.generateKey();
-			pw.println(Base64.getEncoder().encodeToString(key.getEncoded()));
+			PublicKey publicKey = getPublicKey("server/" + keyStore, keyStorePassword);
+			Cipher cRSA = Cipher.getInstance("RSA");
+			cRSA.init(Cipher.WRAP_MODE, publicKey);
+			byte[] encodedKey = cRSA.wrap(key);
+			pw.print(Base64.getEncoder().encodeToString(encodedKey));
 			pw.close();
 		}
 	}
