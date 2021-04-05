@@ -37,7 +37,7 @@ public class SeiTchiz {
 	private static final int MEGABYTE = 1024;
 	private static ObjectOutputStream outStream;
 	private static ObjectInputStream inStream;
-	
+
 	private static final String CLIENT = "client/";
 
 	public static void main(String[] args) throws Exception {
@@ -58,15 +58,15 @@ public class SeiTchiz {
 			SSLSocket socket = (SSLSocket) sf.createSocket(adress, porta);
 			outStream = new ObjectOutputStream(socket.getOutputStream());
 			outStream.writeObject(id);
-			
+
 			inStream = new ObjectInputStream(socket.getInputStream());
 			long nonce = (long) inStream.readObject();
 			boolean registered = (boolean) inStream.readObject();
 			Signature signature = Signature.getInstance("MD5withRSA");
 			signature.initSign(getPrivateKey(keyStore, keyStorePassword));
 			ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-		    buffer.putLong(nonce);
-		    signature.update(buffer.array());
+			buffer.putLong(nonce);
+			signature.update(buffer.array());
 			if(registered) {
 				outStream.writeObject(signature.sign());
 				boolean b = (boolean) inStream.readObject();
@@ -109,22 +109,22 @@ public class SeiTchiz {
 			e.printStackTrace();
 		}
 	}
-	
+
 	private static PrivateKey getPrivateKey(String key, String pw) throws Exception {
 		FileInputStream ins = new FileInputStream(key);
 
-		KeyStore keyStore = KeyStore.getInstance("JCEKS"); //TODO TALVEZ METER EM FINAL
-		keyStore.load(ins, pw.toCharArray());   //Keystore password
+		KeyStore keyStore = KeyStore.getInstance("JCEKS");
+		keyStore.load(ins, pw.toCharArray());
 		String alias = keyStore.aliases().asIterator().next();
-		
+
 		return (PrivateKey) keyStore.getKey(alias, pw.toCharArray());
 	}
-	
+
 	private static Certificate getCertificate(String key, String pw) throws Exception {
 		FileInputStream ins = new FileInputStream(key);
 
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
-		keyStore.load(ins, pw.toCharArray());   //Keystore password
+		keyStore.load(ins, pw.toCharArray());
 		String alias = keyStore.aliases().asIterator().next();
 		Certificate cert = keyStore.getCertificate(alias);
 		return cert;
@@ -135,7 +135,7 @@ public class SeiTchiz {
 	 * @param line String with the method in the first position after a split by spaces
 	 * @throws Exception 
 	 */
-	
+
 	private static void pedido(String line, String user, String keyStore, String keyStorePassword) throws Exception {
 		String[] t = line.split("\\s+");
 		//Switch with every request possible
@@ -276,7 +276,7 @@ public class SeiTchiz {
 			break;
 		}
 	}
-		
+
 	private static boolean getMessages(String groupID, String user, String keyStoreFile, String keyStorePassword) {
 		try {
 			boolean b = (boolean) inStream.readObject();
@@ -292,7 +292,7 @@ public class SeiTchiz {
 			}
 			return b;
 		} catch(Exception e) {
-			
+
 			return false;
 		}
 	}
@@ -302,26 +302,26 @@ public class SeiTchiz {
 			byte[] messageEncoded = (byte[]) inStream.readObject();
 			String line = (String) inStream.readObject();
 			byte[] key = Base64.getDecoder().decode(line);
-			
+
 			FileInputStream ins = new FileInputStream(keyStoreFile);
 			KeyStore keyStore = KeyStore.getInstance("JCEKS");
 			keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
 			String alias = keyStore.aliases().asIterator().next();
 			PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
-			
+
 			Cipher cRSA = Cipher.getInstance("RSA");
 			cRSA.init(Cipher.UNWRAP_MODE, privateKey);
-			
+
 			Key keyEncoded = cRSA.unwrap(key, "RSA", Cipher.SECRET_KEY);
 			SecretKeySpec keySpec = new SecretKeySpec(keyEncoded.getEncoded(), "AES");
 			Cipher cAES = Cipher.getInstance("AES");
 			cAES.init(Cipher.DECRYPT_MODE, keySpec);
-			
+
 			byte[] msg = cAES.doFinal(messageEncoded);
 			String s = new String(msg);
 			return s;
 		} catch (Exception e) {
-			
+
 		}		
 		return null;
 	}
@@ -353,23 +353,23 @@ public class SeiTchiz {
 		sc.close();
 
 		lastLine = lastLine.substring(2, lastLine.length());
-		
+
 		FileInputStream ins = new FileInputStream(keyStoreFile);
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
 		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
 		String alias = keyStore.aliases().asIterator().next();
 		PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
-		
+
 		Cipher cRSA = Cipher.getInstance("RSA");
 		cRSA.init(Cipher.UNWRAP_MODE, privateKey);
 		byte[] key = Base64.getDecoder().decode(lastLine);
 		Key keyEncoded = cRSA.unwrap(key, "RSA", Cipher.SECRET_KEY);
-		
+
 		SecretKeySpec keySpec = new SecretKeySpec(keyEncoded.getEncoded(), "AES");
 		Cipher cAES = Cipher.getInstance("AES");
 		cAES.init(Cipher.ENCRYPT_MODE, keySpec);
 		byte[] msgEncoded = cAES.doFinal(bob.toString().getBytes());
-		
+
 		return msgEncoded;
 	}
 
@@ -379,7 +379,7 @@ public class SeiTchiz {
 			KeyGenerator kg = KeyGenerator.getInstance("AES");
 			kg.init(128);
 			SecretKey key = kg.generateKey();
-			
+
 			@SuppressWarnings("unchecked")
 			HashMap<String, String> users = (HashMap<String, String>) inStream.readObject();
 			if(users != null) {
@@ -388,7 +388,7 @@ public class SeiTchiz {
 					FileInputStream is = new FileInputStream (CLIENT + users.get(member));
 					X509Certificate cert = (X509Certificate) fact.generateCertificate(is);
 					PublicKey publicKey = cert.getPublicKey();
-					
+
 					Cipher cRSA = Cipher.getInstance("RSA");
 					cRSA.init(Cipher.WRAP_MODE, publicKey);
 					byte[] encodedKey = cRSA.wrap(key);
@@ -396,7 +396,7 @@ public class SeiTchiz {
 				}
 			}
 		} catch (Exception e) {
-			
+
 		}
 	}
 
@@ -406,18 +406,18 @@ public class SeiTchiz {
 			KeyGenerator kg = KeyGenerator.getInstance("AES");
 			kg.init(128);
 			SecretKey key = kg.generateKey();
-			
+
 			Cipher cRSA = Cipher.getInstance("RSA");
 			PublicKey publicKey = getCertificate(keyStore, keyStorePassword).getPublicKey();
 			cRSA.init(Cipher.WRAP_MODE, publicKey);
 			byte[] encodedKey = cRSA.wrap(key);
 			outStream.writeObject(encodedKey);
 		} catch (NoSuchAlgorithmException e) {
-			
+
 		} catch (NoSuchPaddingException e) {
-			
+
 		} catch (Exception e) {
-			
+
 		}
 	}
 
@@ -427,7 +427,7 @@ public class SeiTchiz {
 	 * @throws IOException
 	 * @throws ClassNotFoundException
 	 */
-	
+
 	private static void post(String line) throws IOException, ClassNotFoundException {
 		String[] t = line.split("\\s+");
 
@@ -449,7 +449,7 @@ public class SeiTchiz {
 			System.out.println((String) inStream.readObject());
 		}
 	}
-	
+
 	/**
 	 * Prints the options
 	 */
@@ -471,7 +471,7 @@ public class SeiTchiz {
 		System.out.println("history <groupID>");
 		System.out.println("quit");
 	}
-	
+
 	/**
 	 * Receives photos through the socket from the server
 	 * if the server have any to send
@@ -488,7 +488,7 @@ public class SeiTchiz {
 				bob.append("Foto: ");
 				String name = (String) inStream.readObject();
 				int filesize = (int) inStream.readObject();
-				OutputStream os = new FileOutputStream("Fotos/" + name);
+				OutputStream os = new FileOutputStream("client/fotos/" + name);
 				byte[] buffer = new byte[MEGABYTE];
 				int read = 0;
 				int remaining = filesize;

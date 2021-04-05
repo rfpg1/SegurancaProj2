@@ -12,7 +12,9 @@ import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -29,6 +31,10 @@ import java.util.List;
 import java.util.Scanner;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -889,18 +895,42 @@ public class SeiTchizServer {
 		 * @throws IOException
 		 */
 
-		private void sendPhoto(String user, String photo) throws IOException {
-			File file = new File(FOTOS + user + ";" + photo + ".jpg");
-			InputStream is = new FileInputStream(file);
-			byte[] buffer = new byte[MEGABYTE];
-			int length = 0;
-			outStream.writeObject(user + ";" + photo + ".jpg");
-			int filesize = (int) file.length();
-			outStream.writeObject(filesize);
-			while((length = is.read(buffer, 0, buffer.length)) > 0) {
-				outStream.write(buffer, 0, length);
+		private void sendPhoto(String user, String photo) throws Exception {
+			if(isValid(user, photo)) {
+				File file = new File(FOTOS + user + ";" + photo + ".jpg");
+				InputStream is = new FileInputStream(file);
+				byte[] buffer = new byte[MEGABYTE];
+				int length = 0;
+				outStream.writeObject(user + ";" + photo + ".jpg");
+				int filesize = (int) file.length();
+				outStream.writeObject(filesize);
+				while((length = is.read(buffer, 0, buffer.length)) > 0) {
+					outStream.write(buffer, 0, length);
+				}
+				is.close();
 			}
-			is.close();
+		}
+
+		private boolean isValid(String user, String photo) throws Exception {
+			File f1 = new File(FOTOS + user + ";" + photo + ".jpg");
+			byte[] foto = Files.readAllBytes(f1.toPath());
+			File f = new File(FOTOS + "synthesis" + ".txt");
+			Scanner sc = new Scanner(f);
+			while(sc.hasNextLine()) {
+				String[] l = sc.nextLine().split(":");
+				if(l[0].equals(user) && l[1].equals(photo)) {
+					Mac mac = Mac.getInstance("HmacSHA1");
+					SecretKey key = getSecretKey();
+					mac.init(key);
+					System.out.println(l[2].length());
+					byte[] b1 = mac.doFinal(foto);
+					byte[] b2 = Base64.getDecoder().decode(l[2]);
+					sc.close();
+					return MessageDigest.isEqual(b1, b2);
+				}
+			}
+			sc.close();
+			return false;
 		}
 
 		/**
@@ -994,7 +1024,7 @@ public class SeiTchizServer {
 		 * @throws FileNotFoundException
 		 * @throws IOException
 		 */
-		private void saveImage(String user, int id) throws ClassNotFoundException, IOException {          
+		private void saveImage(String user, int id) throws Exception {          
 			int filesize = (int) inStream.readObject();	
 			FileOutputStream fos = new FileOutputStream(FOTOS + user + ";" + id + ".jpg");
 
@@ -1006,6 +1036,27 @@ public class SeiTchizServer {
 				fos.write(buffer, 0, read);
 			}
 			fos.close();
+			File f1 = new File(FOTOS + user + ";" + id + ".jpg");
+			byte[] f = Files.readAllBytes(f1.toPath());
+			Mac mac = Mac.getInstance("HmacSHA1");
+			SecretKey key = getSecretKey();
+			mac.init(key);
+			System.out.println(Base64.getEncoder().encodeToString(mac.doFinal(f)).length());
+			addToDoc(FOTOS + "synthesis", null, user + ":" + id + ":" +  Base64.getEncoder().encodeToString(mac.doFinal(f)));		
+		}
+
+		private SecretKey getSecretKey() throws Exception {
+			File f = new File(SERVER + "secretKey.txt");
+			Scanner sc = new Scanner(f);
+			String key = "";
+			while(sc.hasNextLine()) {
+				key = sc.nextLine();
+			}
+			byte[] keyEncoded = Base64.getDecoder().decode(key);
+			SecretKey ok = new SecretKeySpec(keyEncoded, 0, keyEncoded.length, "AES");			
+			System.out.println(ok.hashCode());
+			sc.close();
+			return ok;
 		}
 
 		/**
@@ -1312,6 +1363,8 @@ public class SeiTchizServer {
 		File f = new File("Grupos.txt");
 		File f1 = new File("Users.txt");
 		File f2 = new File("Fotos.txt");
+		File f3 = new File(FOTOS + "synthesis.txt");
+		File f4 = new File(SERVER + "secretKey.txt");
 		if(!f. exists()) {
 			PrintWriter pw = new PrintWriter("Grupos.txt");
 			pw.print("Grupos:");
@@ -1324,6 +1377,19 @@ public class SeiTchizServer {
 		} 
 		if(!f2.exists()) {
 			PrintWriter pw = new PrintWriter("Fotos.txt");
+			pw.close();
+		}
+		if(!f3.exists()) {
+			PrintWriter pw = new PrintWriter(FOTOS + "synthesis.txt");
+			pw.close();
+		}
+		if(!f4.exists()) {
+			PrintWriter pw = new PrintWriter(SERVER + "secretKey.txt");
+			KeyGenerator kg = KeyGenerator.getInstance("AES");
+			kg.init(128);
+			SecretKey key = kg.generateKey();
+			System.out.println(key.hashCode());
+			pw.println(Base64.getEncoder().encodeToString(key.getEncoded()));
 			pw.close();
 		}
 	}
