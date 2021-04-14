@@ -1235,7 +1235,7 @@ public class SeiTchizServer {
 						line = line + (info + ",");
 					} 
 					bob.append(line + "\n");
-				}
+				}	
 			} else {
 				StringBuilder minibob = new StringBuilder();
 				while(sc.hasNextLine()){
