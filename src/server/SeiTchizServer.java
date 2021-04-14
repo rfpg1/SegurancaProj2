@@ -1351,8 +1351,8 @@ public class SeiTchizServer {
 
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
 		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
-		String alias = keyStore.aliases().asIterator().next();
-		return (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+		//String alias = keyStore.aliases().asIterator().next();
+		return (PrivateKey) keyStore.getKey("myserver", keyStorePassword.toCharArray());
 	}
 
 	/**
@@ -1368,8 +1368,8 @@ public class SeiTchizServer {
 
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
 		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
-		String alias = keyStore.aliases().asIterator().next();
-		Certificate cert = keyStore.getCertificate(alias);
+		//String alias = keyStore.aliases().asIterator().next();
+		Certificate cert = keyStore.getCertificate("myserver");
 		return cert.getPublicKey();
 	}
 	

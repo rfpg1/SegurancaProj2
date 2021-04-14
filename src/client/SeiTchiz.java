@@ -123,9 +123,9 @@ public class SeiTchiz {
 
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
 		keyStore.load(ins, pw.toCharArray());
-		String alias = keyStore.aliases().asIterator().next();
+		//String alias = keyStore.aliases().asIterator().next();
 
-		return (PrivateKey) keyStore.getKey(alias, pw.toCharArray());
+		return (PrivateKey) keyStore.getKey("myserver", pw.toCharArray());
 	}
 
 	/**
@@ -141,8 +141,8 @@ public class SeiTchiz {
 
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
 		keyStore.load(ins, pw.toCharArray());
-		String alias = keyStore.aliases().asIterator().next();
-		Certificate cert = keyStore.getCertificate(alias);
+		//String alias = keyStore.aliases().asIterator().next();
+		Certificate cert = keyStore.getCertificate("myserver");
 		return cert;
 	}
 
@@ -342,8 +342,8 @@ public class SeiTchiz {
 			FileInputStream ins = new FileInputStream(keyStoreFile);
 			KeyStore keyStore = KeyStore.getInstance("JCEKS");
 			keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
-			String alias = keyStore.aliases().asIterator().next();
-			PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+			//String alias = keyStore.aliases().asIterator().next();
+			PrivateKey privateKey = (PrivateKey) keyStore.getKey("myserver", keyStorePassword.toCharArray());
 
 			Cipher cRSA = Cipher.getInstance("RSA");
 			cRSA.init(Cipher.UNWRAP_MODE, privateKey);
@@ -411,8 +411,8 @@ public class SeiTchiz {
 		FileInputStream ins = new FileInputStream(keyStoreFile);
 		KeyStore keyStore = KeyStore.getInstance("JCEKS");
 		keyStore.load(ins, keyStorePassword.toCharArray());   //Keystore password
-		String alias = keyStore.aliases().asIterator().next();
-		PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, keyStorePassword.toCharArray());
+		//String alias = keyStore.aliases().asIterator().next();
+		PrivateKey privateKey = (PrivateKey) keyStore.getKey("myserver", keyStorePassword.toCharArray());
 
 		Cipher cRSA = Cipher.getInstance("RSA");
 		cRSA.init(Cipher.UNWRAP_MODE, privateKey);
